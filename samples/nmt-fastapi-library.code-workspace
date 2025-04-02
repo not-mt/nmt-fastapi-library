@@ -24,11 +24,6 @@
     },
     "files.exclude": {
       "**/__pycache__": true,
-      ".mypy_cache": true,
-      ".ruff_cache": true,
-      ".pytest_cache": true,
-      ".pypoetry_cache": true,
-      ".coverage": true,
     },
     "workbench.panel.defaultLocation": "bottom",
     "terminal.integrated.profiles.windows": {
