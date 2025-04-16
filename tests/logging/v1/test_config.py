@@ -9,7 +9,7 @@ import logging.config
 
 from nmtfast.logging.v1.config import create_logging_config
 from nmtfast.logging.v1.filters import RequestIDFilter
-from nmtfast.middleware.v1.request_id import request_id_var
+from nmtfast.middleware.v1.request_id import REQUEST_ID_CONTEXTVAR
 from nmtfast.settings.v1.schemas import LoggingSettings
 
 
@@ -45,9 +45,9 @@ def test_request_id_filter():
     record = logging.LogRecord("name", logging.INFO, "pathname", 1, "message", (), None)
 
     # test with a set request ID, and reset it
-    token = request_id_var.set("test_request_id")
+    token = REQUEST_ID_CONTEXTVAR.set("test_request_id")
     result = filter_.filter(record)
-    request_id_var.reset(token)
+    REQUEST_ID_CONTEXTVAR.reset(token)
 
     assert result is True
     assert record.request_id == "test_request_id"

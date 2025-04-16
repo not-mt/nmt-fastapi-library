@@ -6,7 +6,7 @@
 
 import logging
 
-from nmtfast.middleware.v1.request_id import request_id_var
+from nmtfast.middleware.v1.request_id import REQUEST_ID_CONTEXTVAR
 
 
 class RequestIDFilter(logging.Filter):
@@ -22,5 +22,5 @@ class RequestIDFilter(logging.Filter):
         Returns:
             bool: True, indicating that the record should be included in the logs.
         """
-        record.request_id = request_id_var.get()
+        record.request_id = REQUEST_ID_CONTEXTVAR.get()
         return True
