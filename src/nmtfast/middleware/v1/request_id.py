@@ -11,7 +11,7 @@ from typing import Awaitable, Callable
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+REQUEST_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "request_id", default=None
 )
 
@@ -35,7 +35,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             Response: The response from the next middleware or endpoint.
         """
         request_id: str = str(f"R{secrets.token_hex(64)[:5]}")
-        request_id_var.set(request_id)
+        REQUEST_ID_CONTEXTVAR.set(request_id)
         response: Response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response

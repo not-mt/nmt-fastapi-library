@@ -127,3 +127,20 @@ class LoggingSettings(BaseModel):
         "[message=%(message)s]"
     )
     loggers: list[dict] = []
+
+
+class Tasks(BaseModel):
+    """
+    Define parameters for async tasks.
+
+    Attributes:
+        name: Name of queue / metadata in async engine.
+        backend: Type of backend to schedule and report tasks.
+        url: URL string for backend (if applicable).
+        sqlite_filename: Path to sqlite file (ignored unless backend="sqlite").
+    """
+
+    name: str
+    backend: str = "sqlite"  # TODO: add redis support
+    url: str = "redis://:FIXME_password@FIXME_host:6379/"
+    sqlite_filename: str = "./huey.sqlite"
