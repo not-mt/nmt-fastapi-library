@@ -6,10 +6,7 @@
 
 import logging
 
-# import huey.signals as HSIG
 from huey import Huey
-
-# from huey.api import Task
 from huey.exceptions import TaskException
 from huey.storage import RedisStorage
 from tenacity import retry, stop_after_attempt, wait_fixed
@@ -88,5 +85,6 @@ def fetch_task_result(huey_app: Huey, uuid: str) -> dict | None:
             f"Result for task {uuid} is an exception! "
             f"Returning metadata instead: {result_d}"
         )
-    # FIXME: huey_app.result() does not have stubs, so it is implicitly Any
+
+    # NOTE: huey_app.result() does not have stubs, so it is implicitly Any
     return result_d  # type: ignore
