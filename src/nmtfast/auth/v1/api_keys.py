@@ -60,8 +60,9 @@ async def authenticate_api_key(
         AuthenticationError: If the API key is unknown.
         AuthorizationError: If the API key is valid but has no assigned ACLs.
     """
-    for eval_key_conf in auth_settings.api_keys.values():
+    for keyname, eval_key_conf in auth_settings.api_keys.items():
         if await verify_api_key(eval_key_conf.algo, api_key, eval_key_conf.hash):
+            logger.info(f"Successful API key authentication for '{keyname}'")
             if eval_key_conf.acls:
                 return eval_key_conf.acls
             raise AuthorizationError("Invalid API key (no permissions)")

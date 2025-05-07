@@ -141,6 +141,22 @@ class Tasks(BaseModel):
     """
 
     name: str
-    backend: str = "sqlite"  # TODO: add redis support
+    backend: str = "sqlite"
     url: str = "redis://:FIXME_password@FIXME_host:6379/"
     sqlite_filename: str = "./huey.sqlite"
+
+
+class CacheSettings(BaseModel):
+    """
+    Define parameters for data caching.
+
+    Attributes:
+        name: Name of queue / metadata in async engine.
+        backend: Type of backend to store cache data.
+        ttl: Number of seconds before expiring backend data (if supported)
+    """
+
+    name: str
+    backend: str = "huey"  # TODO: add mongo support
+    ttl: int = 3600 * 4
+    # mongo_dbname = "FIXME"

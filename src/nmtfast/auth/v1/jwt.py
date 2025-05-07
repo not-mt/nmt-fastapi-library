@@ -157,7 +157,7 @@ async def authenticate_token(
     if claims == {}:
         raise AuthenticationError("no claims found")
 
-    for eval_client_conf in auth_clients.values():
+    for keyname, eval_client_conf in auth_clients.items():
         if eval_client_conf.provider != provider:
             continue
         for claim_name, claim_value in eval_client_conf.claims.items():
@@ -167,6 +167,7 @@ async def authenticate_token(
                 break
         else:
             # NOTE: if the all of the claims match then the client is valid
+            logger.info(f"Successful token authentication for '{keyname}'")
             acls = eval_client_conf.acls
             break
 
