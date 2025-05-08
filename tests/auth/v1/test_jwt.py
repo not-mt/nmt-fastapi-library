@@ -12,6 +12,7 @@ import pytest
 from fastapi import HTTPException
 from jwt import DecodeError, ExpiredSignatureError, InvalidTokenError
 
+from nmtfast.auth.v1.acl import AuthSuccess
 from nmtfast.auth.v1.exceptions import AuthenticationError, AuthorizationError
 from nmtfast.auth.v1.jwt import (
     authenticate_token,
@@ -183,23 +184,28 @@ async def test_authenticate_token_success():
         api_keys={},
     )
     mock_token = "valid.token"
-    expected_acls = [SectionACL(section_regex=".*", permissions=["read"])]
+    expected_auth_info = AuthSuccess(
+        name="client1", acls=[SectionACL(section_regex=".*", permissions=["read"])]
+    )
+
+    mock_claims = {
+        "sub": "test-user",
+        "aud": "test-audience",
+        "iss": "https://example.com",
+    }
 
     with (
         patch(
-            "nmtfast.auth.v1.jwt.get_idp_provider", return_value="test-idp"
+            "nmtfast.auth.v1.jwt.get_idp_provider",
+            return_value="test-idp",  # Return the provider name string, not the object
         ) as mock_get_provider,
         patch(
             "nmtfast.auth.v1.jwt.get_claims_jwks",
-            return_value={
-                "sub": "test-user",
-                "aud": "test-audience",
-                "iss": "https://example.com",
-            },
+            return_value=mock_claims,
         ) as mock_get_claims,
     ):
         result = await authenticate_token(mock_token, auth_settings)
-        assert result == expected_acls
+        assert result == expected_auth_info
         mock_get_provider.assert_called_once_with(mock_token, auth_settings)
         mock_get_claims.assert_called_once_with(mock_token, "https://example.com/jwks")
 
@@ -335,7 +341,8 @@ async def test_authenticate_token_multiple_clients():
         api_keys={},
     )
     mock_token = "valid.token"
-    expected_acls = [SectionACL(section_regex="specific", permissions=["write"])]
+    mock_acls = [SectionACL(section_regex="specific", permissions=["write"])]
+    mock_auth_info = AuthSuccess(name="client2", acls=mock_acls)
 
     with (
         patch("nmtfast.auth.v1.jwt.get_idp_provider", return_value="test-idp"),
@@ -345,7 +352,7 @@ async def test_authenticate_token_multiple_clients():
         ),
     ):
         result = await authenticate_token(mock_token, auth_settings)
-        assert result == expected_acls
+        assert result == mock_auth_info
 
 
 @pytest.mark.asyncio

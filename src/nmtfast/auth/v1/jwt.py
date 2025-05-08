@@ -14,7 +14,8 @@ import jwt
 from fastapi import HTTPException
 from jwt import DecodeError, PyJWKClient
 
-from nmtfast.settings.v1.schemas import AuthClientSettings, AuthSettings, SectionACL
+from nmtfast.auth.v1.acl import AuthSuccess
+from nmtfast.settings.v1.schemas import AuthClientSettings, AuthSettings
 
 from .exceptions import AuthenticationError, AuthorizationError
 
@@ -126,9 +127,7 @@ async def get_idp_provider(token: str, auth_settings: AuthSettings) -> str:
     return provider
 
 
-async def authenticate_token(
-    token: str, auth_settings: AuthSettings
-) -> list[SectionACL]:
+async def authenticate_token(token: str, auth_settings: AuthSettings) -> AuthSuccess:
     """
     Authenticate the client using a JWT.
 
@@ -137,7 +136,7 @@ async def authenticate_token(
         auth_settings: The auth section of app configuration.
 
     Returns:
-        list[SectionACL]: A list of ACLs for a client associated with JWT.
+        AuthSuccess: An object containing the name and ACLs for a JWT.
 
     Raises:
         AuthenticationError: If JWT is invalid (expired, inauthentic, etc).
@@ -145,7 +144,7 @@ async def authenticate_token(
     """
     provider: str = await get_idp_provider(token, auth_settings)
     claims: dict = {}
-    acls: list[SectionACL] = []
+    auth_info: dict = {}
     auth_clients: dict[str, AuthClientSettings] = auth_settings.clients
 
     idp_conf = auth_settings.id_providers[provider]
@@ -167,11 +166,10 @@ async def authenticate_token(
                 break
         else:
             # NOTE: if the all of the claims match then the client is valid
-            logger.info(f"Successful token authentication for '{keyname}'")
-            acls = eval_client_conf.acls
+            auth_info = {"name": keyname, "acls": eval_client_conf.acls}
             break
 
-    if not acls:
+    if not auth_info:
         raise AuthorizationError("Invalid client (no permissions)")
 
-    return acls
+    return AuthSuccess(**auth_info)

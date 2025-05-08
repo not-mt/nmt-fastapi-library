@@ -2,14 +2,29 @@
 # Copyright (c) 2025. All rights reserved.
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Library functions to check client authorization."""
+"""Library classes and functions to handle client authorization."""
 
 import logging
 import re
 
+from pydantic import BaseModel
+
 from nmtfast.settings.v1.schemas import SectionACL
 
 logger = logging.getLogger(__name__)
+
+
+class AuthSuccess(BaseModel):
+    """
+    Results of a successful authentication.
+
+    Attributes:
+        name: API Key or OAuth client name that was authenticated.
+        acls: List of section access control rules.
+    """
+
+    name: str
+    acls: list[SectionACL]
 
 
 async def check_acl(

@@ -9,12 +9,13 @@ import logging
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
-from nmtfast.settings.v1.schemas import AuthSettings, SectionACL
+from nmtfast.auth.v1.acl import AuthSuccess
+from nmtfast.settings.v1.schemas import AuthSettings
 
 from .exceptions import AuthenticationError, AuthorizationError
 
 logger = logging.getLogger(__name__)
-ph = PasswordHasher()  # Create a single PasswordHasher instance for reuse
+ph = PasswordHasher()  # create a single PasswordHasher instance for reuse
 
 
 async def verify_api_key(algo: str, api_key: str, hashed_key: str) -> bool:
@@ -45,7 +46,7 @@ async def verify_api_key(algo: str, api_key: str, hashed_key: str) -> bool:
 
 async def authenticate_api_key(
     api_key: str, auth_settings: AuthSettings
-) -> list[SectionACL]:
+) -> AuthSuccess:
     """
     Authenticate an API key and retrieve associated ACLs.
 
@@ -54,7 +55,7 @@ async def authenticate_api_key(
         auth_settings: The authentication settings containing valid API keys.
 
     Returns:
-        list[SectionACL]: A list of ACLs associated with the authenticated API key.
+        AuthSuccess: An object containing the name and list of ACLs for an API key.
 
     Raises:
         AuthenticationError: If the API key is unknown.
@@ -62,9 +63,8 @@ async def authenticate_api_key(
     """
     for keyname, eval_key_conf in auth_settings.api_keys.items():
         if await verify_api_key(eval_key_conf.algo, api_key, eval_key_conf.hash):
-            logger.info(f"Successful API key authentication for '{keyname}'")
             if eval_key_conf.acls:
-                return eval_key_conf.acls
+                return AuthSuccess(name=keyname, acls=eval_key_conf.acls)
             raise AuthorizationError("Invalid API key (no permissions)")
 
     raise AuthenticationError("Unknown API key")
