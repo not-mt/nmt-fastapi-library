@@ -7,6 +7,7 @@
 import pytest
 from argon2 import PasswordHasher
 
+from nmtfast.auth.v1.acl import AuthSuccess
 from nmtfast.auth.v1.api_keys import authenticate_api_key, verify_api_key
 from nmtfast.auth.v1.exceptions import AuthenticationError, AuthorizationError
 from nmtfast.settings.v1.schemas import AuthApiKeySettings, AuthSettings, SectionACL
@@ -62,17 +63,23 @@ async def test_authenticate_api_key_valid_with_acls():
     """
     api_key = "test_api_key"
     hashed_key = ph.hash(api_key)
-    acls = [SectionACL(section_regex="widgets", permissions=["read"])]
+    mock_acls = [SectionACL(section_regex=".*", permissions=["read"])]
+    mock_auth_info = AuthSuccess(name=api_key, acls=mock_acls)
+
     auth_settings = AuthSettings(
         swagger_token_url="test",
         id_providers={},
         api_keys={
-            "test_key": AuthApiKeySettings(algo="argon2", hash=hashed_key, acls=acls)
+            api_key: AuthApiKeySettings(
+                algo="argon2",
+                hash=hashed_key,
+                acls=mock_acls,
+            )
         },
     )
     result = await authenticate_api_key(api_key=api_key, auth_settings=auth_settings)
 
-    assert result == acls
+    assert result == mock_auth_info
 
 
 @pytest.mark.asyncio
