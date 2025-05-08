@@ -7,7 +7,7 @@
 import logging
 import re
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 from nmtfast.settings.v1.schemas import SectionACL
 
@@ -25,6 +25,13 @@ class AuthSuccess(BaseModel):
 
     name: str
     acls: list[SectionACL]
+
+    @field_serializer("acls")
+    def serialize_acls(self, acls: list[SectionACL], _info):
+        """
+        Custom serializer for converting objects to JSON objects.
+        """
+        return [acl.model_dump() for acl in acls]
 
 
 async def check_acl(

@@ -4,9 +4,11 @@
 
 """Unit tests for auth functions."""
 
+import json
+
 import pytest
 
-from nmtfast.auth.v1.acl import check_acl
+from nmtfast.auth.v1.acl import AuthSuccess, check_acl
 from nmtfast.settings.v1.schemas import SectionACL
 
 
@@ -93,3 +95,19 @@ async def test_check_acl_filter_deny():
     """
     # TODO: Implement filter tests when filters are added
     pass
+
+
+def test_model_json_serialization():
+    """
+    Tests that the model can be properly converted to JSON.
+
+    Ensures the entire AuthSuccess model (including ACLs) serializes to valid JSON.
+    """
+    acl = SectionACL(section_regex=".*", permissions=["read"])
+    auth_success = AuthSuccess(name="test-client", acls=[acl])
+    json_data = auth_success.model_dump_json()
+    parsed = json.loads(json_data)
+
+    assert parsed["name"] == "test-client"
+    assert parsed["acls"][0]["section_regex"] == ".*"
+    assert parsed["acls"][0]["permissions"] == ["read"]
