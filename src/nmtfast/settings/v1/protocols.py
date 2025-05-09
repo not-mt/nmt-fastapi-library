@@ -17,9 +17,9 @@ class LoggingSettingsProtocol(Protocol):
     Attributes:
         level: Minimum logging level (e.g., "DEBUG", "INFO", "WARNING").
         format: Format string for log messages.
-        loggers: List of logger-specific configurations as dictionaries.
+        loggers: Dictionary of logger-specific configurations as dictionaries.
     """
 
     level: str
     format: str
-    loggers: list[dict]
+    loggers: dict[str, dict]
