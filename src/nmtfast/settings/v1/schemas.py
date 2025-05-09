@@ -117,7 +117,7 @@ class LoggingSettings(BaseModel):
     Attributes:
         level: Logging level (default: "INFO").
         format: Log message format string.
-        loggers: List of logger-specific configurations.
+        loggers: Dictionary of logger-specific configurations.
     """
 
     level: str = "INFO"
@@ -126,7 +126,7 @@ class LoggingSettings(BaseModel):
         "[level=%(levelname)s] [name=%(name)s] [file=%(filename)s:%(lineno)d] "
         "[message=%(message)s]"
     )
-    loggers: list[dict] = []
+    loggers: dict = {}
 
 
 class Tasks(BaseModel):
