@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from jwt import DecodeError, PyJWKClient
 
 from nmtfast.auth.v1.acl import AuthSuccess
-from nmtfast.settings.v1.schemas import AuthClientSettings, AuthSettings
+from nmtfast.settings.v1.schemas import AuthSettings, IncomingAuthClient
 
 from .exceptions import AuthenticationError, AuthorizationError
 
@@ -145,7 +145,7 @@ async def authenticate_token(token: str, auth_settings: AuthSettings) -> AuthSuc
     provider: str = await get_idp_provider(token, auth_settings)
     claims: dict = {}
     auth_info: dict = {}
-    auth_clients: dict[str, AuthClientSettings] = auth_settings.clients
+    auth_clients: dict[str, IncomingAuthClient] = auth_settings.incoming.clients
 
     idp_conf = auth_settings.id_providers[provider]
     if idp_conf.type == "jwks":
