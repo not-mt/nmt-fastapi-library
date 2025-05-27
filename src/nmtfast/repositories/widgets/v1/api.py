@@ -7,6 +7,7 @@
 import logging
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from nmtfast.repositories.widgets.v1.exceptions import WidgetApiException
 from nmtfast.repositories.widgets.v1.schemas import (
@@ -15,6 +16,7 @@ from nmtfast.repositories.widgets.v1.schemas import (
     WidgetZap,
     WidgetZapTask,
 )
+from nmtfast.retry.v1.tenacity import tenacity_retry_log
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +35,12 @@ class WidgetApiRepository:
     def __init__(self, api_client: httpx.AsyncClient) -> None:
         self.api_client: httpx.AsyncClient = api_client
 
-    # @retry(
-    #    reraise=True,
-    #    stop=stop_after_attempt(5),
-    #    wait=wait_fixed(0.2),
-    #    after=tenacity_retry_log(logger),
-    # )
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(5),
+        wait=wait_fixed(0.2),
+        after=tenacity_retry_log(logger),
+    )
     async def widget_create(self, widget: WidgetCreate) -> WidgetRead:
         """
         Create a new widget and persist it to the database.
@@ -65,12 +67,12 @@ class WidgetApiRepository:
 
         return WidgetRead(**resp_widget)
 
-    # @retry(
-    #    reraise=True,
-    #    stop=stop_after_attempt(5),
-    #    wait=wait_fixed(0.2),
-    #    after=tenacity_retry_log(logger),
-    # )
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(5),
+        wait=wait_fixed(0.2),
+        after=tenacity_retry_log(logger),
+    )
     async def get_by_id(self, widget_id: int) -> WidgetRead:
         """
         Retrieve a widget by its ID from the database.
@@ -96,12 +98,12 @@ class WidgetApiRepository:
 
         return api_widget
 
-    # @retry(
-    #    reraise=True,
-    #    stop=stop_after_attempt(5),
-    #    wait=wait_fixed(0.2),
-    #    after=tenacity_retry_log(logger),
-    # )
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(5),
+        wait=wait_fixed(0.2),
+        after=tenacity_retry_log(logger),
+    )
     async def widget_zap(
         self,
         widget_id: int,
@@ -135,12 +137,12 @@ class WidgetApiRepository:
 
         return api_task
 
-    # @retry(
-    #    reraise=True,
-    #    stop=stop_after_attempt(5),
-    #    wait=wait_fixed(0.2),
-    #    after=tenacity_retry_log(logger),
-    # )
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(5),
+        wait=wait_fixed(0.2),
+        after=tenacity_retry_log(logger),
+    )
     async def widget_zap_by_uuid(
         self,
         widget_id: int,
