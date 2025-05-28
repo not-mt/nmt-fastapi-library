@@ -21,14 +21,18 @@ from nmtfast.repositories.widgets.v1.schemas import (
 
 @pytest.fixture
 def fake_api_client():
-    """Create a fake httpx.AsyncClient mock."""
+    """
+    Create a fake httpx.AsyncClient mock.
+    """
     client = AsyncMock(spec=httpx.AsyncClient)
     return client
 
 
 @pytest.mark.asyncio
 async def test_widget_create_success(fake_api_client):
-    """Test successful widget creation."""
+    """
+    Test successful widget creation.
+    """
     repo = WidgetApiRepository(fake_api_client)
     widget_in = WidgetCreate(name="test")
 
@@ -47,7 +51,9 @@ async def test_widget_create_success(fake_api_client):
 
 @pytest.mark.asyncio
 async def test_widget_create_failure_raises(fake_api_client):
-    """Test widget_create raises WidgetApiException on failure."""
+    """
+    Test widget_create raises WidgetApiException on failure.
+    """
     repo = WidgetApiRepository(fake_api_client)
     widget_in = WidgetCreate(name="fail")
 
@@ -61,9 +67,10 @@ async def test_widget_create_failure_raises(fake_api_client):
 
 @pytest.mark.asyncio
 async def test_get_by_id_success(fake_api_client):
-    """Test successful get_by_id."""
+    """
+    Test successful get_by_id.
+    """
     repo = WidgetApiRepository(fake_api_client)
-
     mock_response = WidgetRead(id=2, name="found").model_dump()
 
     fake_api_client.get.return_value = httpx.Response(
@@ -79,9 +86,10 @@ async def test_get_by_id_success(fake_api_client):
 
 @pytest.mark.asyncio
 async def test_get_by_id_failure_raises(fake_api_client):
-    """Test get_by_id raises WidgetApiException on failure."""
+    """
+    Test get_by_id raises WidgetApiException on failure.
+    """
     repo = WidgetApiRepository(fake_api_client)
-
     fake_api_client.get.return_value = httpx.Response(status_code=404, text="Not found")
 
     with pytest.raises(WidgetApiException):
@@ -90,10 +98,11 @@ async def test_get_by_id_failure_raises(fake_api_client):
 
 @pytest.mark.asyncio
 async def test_widget_zap_success(fake_api_client):
-    """Test successful widget_zap."""
+    """
+    Test successful widget_zap.
+    """
     repo = WidgetApiRepository(fake_api_client)
     payload = WidgetZap(duration=10)
-
     mock_response = WidgetZapTask(
         uuid="uuid-123",
         state="PENDING",
@@ -115,7 +124,9 @@ async def test_widget_zap_success(fake_api_client):
 
 @pytest.mark.asyncio
 async def test_widget_zap_failure_raises(fake_api_client):
-    """Test widget_zap raises WidgetApiException on failure."""
+    """
+    Test widget_zap raises WidgetApiException on failure.
+    """
     repo = WidgetApiRepository(fake_api_client)
     payload = WidgetZap(duration=10)
 
@@ -127,10 +138,11 @@ async def test_widget_zap_failure_raises(fake_api_client):
 
 @pytest.mark.asyncio
 async def test_widget_zap_by_uuid_success(fake_api_client):
-    """Test successful widget_zap_by_uuid."""
+    """
+    Test successful widget_zap_by_uuid.
+    """
     repo = WidgetApiRepository(fake_api_client)
-
-    mock_response = WidgetZapTask(
+    mock_response_data = WidgetZapTask(
         uuid="uuid-456",
         state="SUCCESS",
         id=1,
@@ -138,25 +150,26 @@ async def test_widget_zap_by_uuid_success(fake_api_client):
         runtime=123,
     ).model_dump()
 
-    fake_api_client.post.return_value = httpx.Response(
+    fake_api_client.get.return_value = httpx.Response(
         status_code=200,
-        json=mock_response,
+        json=mock_response_data,
     )
-    fake_api_client.post.return_value.json = lambda **kwargs: mock_response
+    fake_api_client.get.return_value.json = lambda **kwargs: mock_response_data
 
     task = await repo.widget_zap_by_uuid(1, "uuid-456")
+
     assert isinstance(task, WidgetZapTask)
     assert task.uuid == "uuid-456"
+    assert task.state == "SUCCESS"
 
 
 @pytest.mark.asyncio
 async def test_widget_zap_by_uuid_failure_raises(fake_api_client):
-    """Test widget_zap_by_uuid raises WidgetApiException on failure."""
+    """
+    Test widget_zap_by_uuid raises WidgetApiException on failure.
+    """
     repo = WidgetApiRepository(fake_api_client)
-
-    fake_api_client.post.return_value = httpx.Response(
-        status_code=404, text="Not found"
-    )
+    fake_api_client.get.return_value = httpx.Response(status_code=404, text="Not found")
 
     with pytest.raises(WidgetApiException):
         await repo.widget_zap_by_uuid(1, "uuid-999")
