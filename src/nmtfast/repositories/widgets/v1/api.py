@@ -43,7 +43,7 @@ class WidgetApiRepository:
     )
     async def widget_create(self, widget: WidgetCreate) -> WidgetRead:
         """
-        Create a new widget and persist it to the database.
+        Create a new widget through the API.
 
         Args:
             widget: The widget data transfer object.
@@ -75,7 +75,7 @@ class WidgetApiRepository:
     )
     async def get_by_id(self, widget_id: int) -> WidgetRead:
         """
-        Retrieve a widget by its ID from the database.
+        Retrieve a widget by its ID through the API.
 
         Args:
             widget_id: The ID of the widget to retrieve.
@@ -110,7 +110,7 @@ class WidgetApiRepository:
         payload: WidgetZap,
     ) -> WidgetZapTask:
         """
-        Retrieve a widget by its ID from the database.
+        Retrieve a widget by its ID through the API.
 
         Args:
             widget_id: The ID of the widget to zap.
@@ -149,7 +149,7 @@ class WidgetApiRepository:
         task_uuid: str,
     ) -> WidgetZapTask:
         """
-        Retrieve a widget by its ID from the database.
+        Retrieve a zap task by its UUID through the API.
 
         Args:
             widget_id: The ID of the widget to zap.
@@ -162,7 +162,9 @@ class WidgetApiRepository:
             WidgetApiException: Raised when upstream API reports failure status code.
         """
         logger.debug(f"Fetching zap task by UUID: {task_uuid}")
-        resp = await self.api_client.post(f"/v1/widgets/{widget_id}/zap/{task_uuid}")
+        resp = await self.api_client.get(
+            f"/v1/widgets/{widget_id}/zap/{task_uuid}/status"
+        )
 
         if resp.status_code != 200:
             logger.info(f"Failed get task by UUID: {resp.status_code}: {resp.text}")
