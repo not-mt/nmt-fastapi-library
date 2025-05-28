@@ -21,9 +21,10 @@ from nmtfast.auth.v1.jwt import (
     get_idp_provider,
 )
 from nmtfast.settings.v1.schemas import (
-    AuthClientSettings,
     AuthSettings,
     IDProvider,
+    IncomingAuthClient,
+    IncomingAuthSettings,
     SectionACL,
 )
 
@@ -174,14 +175,16 @@ async def test_authenticate_token_success():
                 jwks_endpoint="https://example.com/jwks",
             )
         },
-        clients={
-            "client1": AuthClientSettings(
-                provider="test-idp",
-                claims={"sub": "test-user", "aud": "test-audience"},
-                acls=[SectionACL(section_regex=".*", permissions=["read"])],
-            )
-        },
-        api_keys={},
+        incoming=IncomingAuthSettings(
+            clients={
+                "client1": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"sub": "test-user", "aud": "test-audience"},
+                    acls=[SectionACL(section_regex=".*", permissions=["read"])],
+                )
+            },
+            api_keys={},
+        ),
     )
     mock_token = "valid.token"
     expected_auth_info = AuthSuccess(
@@ -224,8 +227,10 @@ async def test_authenticate_token_no_claims():
                 jwks_endpoint="https://example.com/jwks",
             )
         },
-        clients={},
-        api_keys={},
+        incoming=IncomingAuthSettings(
+            clients={},
+            api_keys={},
+        ),
     )
     mock_token = "valid.token"
 
@@ -251,14 +256,16 @@ async def test_authenticate_token_no_matching_client():
                 jwks_endpoint="https://example.com/jwks",
             )
         },
-        clients={
-            "client1": AuthClientSettings(
-                provider="test-idp",
-                claims={"sub": "non-matching-user"},
-                acls=[SectionACL(section_regex=".*", permissions=["read"])],
-            )
-        },
-        api_keys={},
+        incoming=IncomingAuthSettings(
+            clients={
+                "client1": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"sub": "non-matching-user"},
+                    acls=[SectionACL(section_regex=".*", permissions=["read"])],
+                )
+            },
+            api_keys={},
+        ),
     )
     mock_token = "valid.token"
 
@@ -287,14 +294,16 @@ async def test_authenticate_token_partial_claims_match():
                 jwks_endpoint="https://example.com/jwks",
             )
         },
-        clients={
-            "client1": AuthClientSettings(
-                provider="test-idp",
-                claims={"sub": "test-user", "aud": "required-audience"},
-                acls=[SectionACL(section_regex=".*", permissions=["read"])],
-            )
-        },
-        api_keys={},
+        incoming=IncomingAuthSettings(
+            clients={
+                "client1": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"sub": "test-user", "aud": "required-audience"},
+                    acls=[SectionACL(section_regex=".*", permissions=["read"])],
+                )
+            },
+            api_keys={},
+        ),
     )
     mock_token = "valid.token"
 
@@ -326,19 +335,21 @@ async def test_authenticate_token_multiple_clients():
                 jwks_endpoint="https://example.com/jwks",
             )
         },
-        clients={
-            "client1": AuthClientSettings(
-                provider="test-idp",
-                claims={"sub": "non-matching-user"},
-                acls=[SectionACL(section_regex=".*", permissions=["read"])],
-            ),
-            "client2": AuthClientSettings(
-                provider="test-idp",
-                claims={"sub": "correct-user"},
-                acls=[SectionACL(section_regex="specific", permissions=["write"])],
-            ),
-        },
-        api_keys={},
+        incoming=IncomingAuthSettings(
+            clients={
+                "client1": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"sub": "non-matching-user"},
+                    acls=[SectionACL(section_regex=".*", permissions=["read"])],
+                ),
+                "client2": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"sub": "correct-user"},
+                    acls=[SectionACL(section_regex="specific", permissions=["write"])],
+                ),
+            },
+            api_keys={},
+        ),
     )
     mock_token = "valid.token"
     mock_acls = [SectionACL(section_regex="specific", permissions=["write"])]
@@ -369,14 +380,16 @@ async def test_authenticate_token_unsupported_provider_type():
                 jwks_endpoint="https://example.com/jwks",
             )
         },
-        clients={
-            "client1": AuthClientSettings(
-                provider="test-idp",
-                claims={"sub": "test-user"},
-                acls=[SectionACL(section_regex=".*", permissions=["read"])],
-            )
-        },
-        api_keys={},
+        incoming=IncomingAuthSettings(
+            clients={
+                "client1": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"sub": "test-user"},
+                    acls=[SectionACL(section_regex=".*", permissions=["read"])],
+                )
+            },
+            api_keys={},
+        ),
     )
     mock_token = "valid.token"
 
@@ -405,14 +418,16 @@ async def test_authenticate_token_future_provider_type():
                 jwks_endpoint="https://example.com/jwks",
             )
         },
-        clients={
-            "client1": AuthClientSettings(
-                provider="test-idp",
-                claims={"sub": "test-user"},
-                acls=[SectionACL(section_regex=".*", permissions=["read"])],
-            )
-        },
-        api_keys={},
+        incoming=IncomingAuthSettings(
+            clients={
+                "client1": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"sub": "test-user"},
+                    acls=[SectionACL(section_regex=".*", permissions=["read"])],
+                )
+            },
+            api_keys={},
+        ),
     )
     mock_token = "valid.token"
 
@@ -440,19 +455,21 @@ async def test_authenticate_token_only_wrong_provider_clients():
                 jwks_endpoint="https://other.com/jwks",
             ),
         },
-        clients={
-            "client1": AuthClientSettings(
-                provider="other-idp",  # doesn't match
-                claims={"sub": "test-user"},
-                acls=[SectionACL(section_regex=".*", permissions=["read"])],
-            ),
-            "client2": AuthClientSettings(
-                provider="other-idp",  # doesn't match
-                claims={"sub": "test-user"},
-                acls=[SectionACL(section_regex=".*", permissions=["read"])],
-            ),
-        },
-        api_keys={},
+        incoming=IncomingAuthSettings(
+            clients={
+                "client1": IncomingAuthClient(
+                    provider="other-idp",  # doesn't match
+                    claims={"sub": "test-user"},
+                    acls=[SectionACL(section_regex=".*", permissions=["read"])],
+                ),
+                "client2": IncomingAuthClient(
+                    provider="other-idp",  # doesn't match
+                    claims={"sub": "test-user"},
+                    acls=[SectionACL(section_regex=".*", permissions=["read"])],
+                ),
+            },
+            api_keys={},
+        ),
     )
     mock_token = "valid.token"
 

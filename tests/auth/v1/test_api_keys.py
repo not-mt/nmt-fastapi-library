@@ -10,7 +10,12 @@ from argon2 import PasswordHasher
 from nmtfast.auth.v1.acl import AuthSuccess
 from nmtfast.auth.v1.api_keys import authenticate_api_key, verify_api_key
 from nmtfast.auth.v1.exceptions import AuthenticationError, AuthorizationError
-from nmtfast.settings.v1.schemas import AuthApiKeySettings, AuthSettings, SectionACL
+from nmtfast.settings.v1.schemas import (
+    AuthSettings,
+    IncomingAuthApiKey,
+    IncomingAuthSettings,
+    SectionACL,
+)
 
 ph = PasswordHasher()
 
@@ -69,13 +74,15 @@ async def test_authenticate_api_key_valid_with_acls():
     auth_settings = AuthSettings(
         swagger_token_url="test",
         id_providers={},
-        api_keys={
-            api_key: AuthApiKeySettings(
-                algo="argon2",
-                hash=hashed_key,
-                acls=mock_acls,
-            )
-        },
+        incoming=IncomingAuthSettings(
+            api_keys={
+                api_key: IncomingAuthApiKey(
+                    algo="argon2",
+                    hash=hashed_key,
+                    acls=mock_acls,
+                )
+            }
+        ),
     )
     result = await authenticate_api_key(api_key=api_key, auth_settings=auth_settings)
 
@@ -94,9 +101,11 @@ async def test_authenticate_api_key_valid_no_acls():
     auth_settings = AuthSettings(
         swagger_token_url="test",
         id_providers={},
-        api_keys={
-            "test_key": AuthApiKeySettings(algo="argon2", hash=hashed_key, acls=[])
-        },
+        incoming=IncomingAuthSettings(
+            api_keys={
+                "test_key": IncomingAuthApiKey(algo="argon2", hash=hashed_key, acls=[])
+            },
+        ),
     )
     with pytest.raises(AuthorizationError):
         await authenticate_api_key(api_key=api_key, auth_settings=auth_settings)
@@ -109,7 +118,13 @@ async def test_authenticate_api_key_invalid():
 
     Verifies that the function raises an AuthenticationError when an invalid API key is provided.
     """
-    auth_settings = AuthSettings(swagger_token_url="test", id_providers={}, api_keys={})
+    auth_settings = AuthSettings(
+        swagger_token_url="test",
+        id_providers={},
+        incoming=IncomingAuthSettings(
+            api_keys={},
+        ),
+    )
 
     with pytest.raises(AuthenticationError):
         await authenticate_api_key(
@@ -131,9 +146,11 @@ async def test_authenticate_api_key_incorrect_api_key():
     auth_settings = AuthSettings(
         swagger_token_url="test",
         id_providers={},
-        api_keys={
-            "test_key": AuthApiKeySettings(algo="argon2", hash=hashed_key, acls=[])
-        },
+        incoming=IncomingAuthSettings(
+            api_keys={
+                "test_key": IncomingAuthApiKey(algo="argon2", hash=hashed_key, acls=[])
+            },
+        ),
     )
     with pytest.raises(AuthenticationError):
         await authenticate_api_key(

@@ -4,6 +4,8 @@
 
 """pydantic-settings schemas that can be re-used in nmtfast-derived apps."""
 
+from typing import Literal, Optional
+
 from pydantic import BaseModel
 
 
@@ -12,18 +14,22 @@ class IDProvider(BaseModel):
     ID provider/platform settings.
 
     Attributes:
-        type: Provider type (default: "jwks").
+        type: Provider type.
         issuer_regex: Regex pattern for validating issuer claims.
-        jwks_endpoint: URL for JWKS endpoint (default: "http://localhost/jwks").
-        introspection_enabled: Whether token introspection is enabled (default: False).
+        jwks_endpoint: URL for JWKS endpoint.
+        token_endpoint: URL for acquiring access/refresh tokens.
+        authorize_endpoint: URL for auth code flow.
+        introspection_enabled: Whether token introspection is enabled.
         introspection_endpoint: URL for token introspection endpoint.
-        keyid_enabled: Whether key ID verification is enabled (default: False).
+        keyid_enabled: Whether key ID verification is enabled.
         keyid_endpoint: URL for key ID verification endpoint.
     """
 
     type: str = "jwks"
     issuer_regex: str = "__REAL_REGEX_GOES_HERE__"
     jwks_endpoint: str = "http://localhost/jwks"
+    token_endpoint: str = "http://localhost/token"
+    authorize_endpoint: str = "http://localhost/authorize"
     introspection_enabled: bool = False
     introspection_endpoint: str = "http://localhost/introspection"
     keyid_enabled: bool = False
@@ -55,9 +61,9 @@ class SectionACL(BaseModel):
     # filters: list[FilterACL] = []
 
 
-class AuthClientSettings(BaseModel):
+class IncomingAuthClient(BaseModel):
     """
-    OAuth client configuration.
+    Incoming OAuth client configuration.
 
     Attributes:
         contact: Contact information for the client.
@@ -74,14 +80,14 @@ class AuthClientSettings(BaseModel):
     acls: list[SectionACL]
 
 
-class AuthApiKeySettings(BaseModel):
+class IncomingAuthApiKey(BaseModel):
     """
-    API key configuration.
+    Incoming API key configuration.
 
     Attributes:
         contact: Contact information for the API key holder.
         memo: Additional notes about the API key.
-        algo: Hashing algorithm used (default: "argon2").
+        algo: Hashing algorithm used.
         hash: Hashed API key value.
         acls: List of section access control rules.
     """
@@ -93,6 +99,75 @@ class AuthApiKeySettings(BaseModel):
     acls: list[SectionACL]
 
 
+class IncomingAuthSettings(BaseModel):
+    """
+    Incoming authentication settings.
+
+    Attributes:
+        clients: Dictionary of OAuth client configurations.
+        api_keys: Dictionary of API key configurations.
+    """
+
+    clients: dict[str, IncomingAuthClient] = {}
+    api_keys: dict[str, IncomingAuthApiKey] = {}
+
+
+class OutgoingAuthClient(BaseModel):
+    """
+    Outgoing OAuth client configuration.
+
+    Attributes:
+        contact: Contact information for the client.
+        memo: Additional notes about the client.
+        provider: Associated ID provider name.
+        grant_type: OAuth 2.0 grant type used (e.g. client_credentials, auth_code).
+        cache_ttl: Number of seconds to cache access tokens for this client.
+        client_id: The client ID for the OAuth client.
+        client_secret: The client secret for the OAuth client.
+        token_endpoint_auth_method: Use "basic" or "post" to send credentials.
+    """
+
+    contact: str = ""
+    memo: str = ""
+    provider: str
+    grant_type: str = "client_credentials"
+    cache_ttl: int = 1800
+    client_id: str
+    client_secret: str
+    token_endpoint_auth_method: Literal[
+        "client_secret_basic",
+        "client_secret_post",
+    ] = "client_secret_basic"
+
+
+class OutgoingAuthHeaders(BaseModel):
+    """
+    Outgoing header configuration.
+
+    Attributes:
+        contact: Contact information for the client.
+        memo: Additional notes about the client.
+        headers: A dictionary of authentication-related header names and header values.
+    """
+
+    contact: str = ""
+    memo: str = ""
+    headers: dict[str, str]
+
+
+class OutgoingAuthSettings(BaseModel):
+    """
+    Outgoing authentication settings.
+
+    Attributes:
+        clients: Dictionary of OAuth client configurations.
+        headers: Dictionary of security header configurations.
+    """
+
+    clients: dict[str, OutgoingAuthClient] = {}
+    headers: dict[str, OutgoingAuthHeaders] = {}
+
+
 class AuthSettings(BaseModel):
     """
     Authentication and authorization configuration.
@@ -100,14 +175,57 @@ class AuthSettings(BaseModel):
     Attributes:
         swagger_token_url: URL for Swagger/OpenAPI token authentication.
         id_providers: Dictionary of configured ID providers.
-        clients: Dictionary of OAuth client configurations.
-        api_keys: Dictionary of API key configurations.
+        incoming: Settings related to incoming authentication clients, keys, etc.
+        outgoing: Settings related to outgoing authentication to other services.
     """
 
     swagger_token_url: str
     id_providers: dict[str, IDProvider]
-    clients: dict[str, AuthClientSettings] = {}
-    api_keys: dict[str, AuthApiKeySettings] = {}
+    incoming: IncomingAuthSettings = IncomingAuthSettings()
+    outgoing: OutgoingAuthSettings = OutgoingAuthSettings()
+
+
+class DiscoveredService(BaseModel):
+    """
+    Configuration for a single discovered external service.
+
+    Attributes:
+        base_url: The base URL or endpoint for the service.
+        headers: A dictionary of static (non-security) headers to send with each
+            request.
+        auth_method: The authentication method to use for this service.
+        auth_principal: The name of the outgoing authentication principal to use.
+            This is derived by th auth_method field; for example, specifying
+            client_credentials in auth_method will mean that the auth_principal
+            is a key in auth.outgoing.clients.
+        scope: Scope that should be included when requesting an access token.
+        timeout: Timeout for reads/writes to this service, in seconds.
+        connect_timeout: Timeout for opening connections to this service, in seconds.
+        retries: Number of retries for failed requests to this service.
+    """
+
+    base_url: str
+    headers: dict[str, str] = {}
+    auth_method: Literal["client_credentials", "headers"]
+    auth_principal: str
+    scope: Optional[str] = None
+    timeout: float = 10.0
+    connect_timeout: float = 5.0
+    retries: int = 3
+
+
+class ServiceDiscoverySettings(BaseModel):
+    """
+    Configuration for service discovery within the application.
+
+    Attributes:
+        mode: The mode of service discovery (e.g., "manual").
+        services: A dictionary where keys are names of services and the values
+            are service configurations.
+    """
+
+    mode: Literal["manual"] = "manual"
+    services: dict[str, DiscoveredService] = {}
 
 
 class LoggingSettings(BaseModel):
@@ -115,7 +233,7 @@ class LoggingSettings(BaseModel):
     Logging configuration.
 
     Attributes:
-        level: Logging level (default: "INFO").
+        level: Logging level.
         format: Log message format string.
         loggers: Dictionary of logger-specific configurations.
     """
@@ -129,7 +247,7 @@ class LoggingSettings(BaseModel):
     loggers: dict = {}
 
 
-class Tasks(BaseModel):
+class TaskSettings(BaseModel):
     """
     Define parameters for async tasks.
 
