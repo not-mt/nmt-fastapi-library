@@ -17,7 +17,10 @@ def test_request_duration_middleware():
     Test whether request duration is recorded in headers.
     """
     app = FastAPI()
-    app.add_middleware(RequestDurationMiddleware)
+    app.add_middleware(
+        RequestDurationMiddleware,
+        remote_headers=["X-Real-IP", "X-Forwarded-For"],
+    )
     client = TestClient(app)
 
     @app.get("/")
@@ -27,6 +30,9 @@ def test_request_duration_middleware():
     with patch("logging.Logger.info") as mock_logger:
         response = client.get("/")
 
+    with patch("logging.Logger.info") as mock_logger:
+        response = client.get("/", headers={"X-Real-IP": "1.2.3.4"})
+
     assert response.status_code == 200
-    assert "X-Process-Time-Milliseconds" in response.headers
+    assert "x-nmtfast-request-time-ms" in response.headers
     assert mock_logger.called
