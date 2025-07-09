@@ -236,6 +236,7 @@ class LoggingSettings(BaseModel):
         level: Logging level.
         format: Log message format string.
         loggers: Dictionary of logger-specific configurations.
+        client_host_headers: List of headers to use for identifying the client host.
     """
 
     level: str = "INFO"
@@ -245,6 +246,7 @@ class LoggingSettings(BaseModel):
         "[message=%(message)s]"
     )
     loggers: dict = {}
+    client_host_headers: list[str] = ["X-Real-IP", "X-Forwarded-For"]
 
 
 class TaskSettings(BaseModel):

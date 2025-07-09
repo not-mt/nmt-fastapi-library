@@ -18,8 +18,10 @@ class LoggingSettingsProtocol(Protocol):
         level: Minimum logging level (e.g., "DEBUG", "INFO", "WARNING").
         format: Format string for log messages.
         loggers: Dictionary of logger-specific configurations as dictionaries.
+        client_host_headers: List of headers to use for identifying the client host.
     """
 
     level: str
     format: str
     loggers: dict[str, dict]
+    client_host_headers: list[str]

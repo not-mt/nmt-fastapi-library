@@ -29,10 +29,10 @@ def test_request_id_middleware():
         response = client.get("/")
 
     assert response.status_code == 200
-    assert response.headers["X-Request-ID"] == "R00000"
+    assert response.headers["x-nmtfast-request-id"] == "R00000"
 
     with patch("secrets.token_hex") as mock_token2:
         mock_token2.return_value = "1" * 128
         response = client.get("/")
 
-    assert response.headers["X-Request-ID"] == "R11111"
+    assert response.headers["x-nmtfast-request-id"] == "R11111"

@@ -37,5 +37,5 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         request_id: str = str(f"R{secrets.token_hex(64)[:5]}")
         REQUEST_ID_CONTEXTVAR.set(request_id)
         response: Response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
+        response.headers["x-nmtfast-request-id"] = request_id
         return response
