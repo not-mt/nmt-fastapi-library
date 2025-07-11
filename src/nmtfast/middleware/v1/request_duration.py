@@ -51,7 +51,9 @@ class RequestDurationMiddleware(BaseHTTPMiddleware):
         for header in request.headers:
             logger.debug(f"Header: {header} = {request.headers[header]}")
 
-        # Iterate over header names and use the first found value as remote_host
+        logger.debug(f"Checking for trusted headers: {self.header_names}")
+
+        # iterate over header names and use the first found value as remote_host
         for header_name in self.header_names:
             header_value: str | None = request.headers.get(header_name)
             if header_value:
