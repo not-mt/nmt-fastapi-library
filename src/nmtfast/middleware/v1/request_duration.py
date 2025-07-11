@@ -58,6 +58,8 @@ class RequestDurationMiddleware(BaseHTTPMiddleware):
                 remote_host = header_value
                 logger.debug(f"Using first trusted header for host: {header_name}")
                 break
+            else:
+                logger.debug(f"No trusted header found for {header_name}")
 
         client_info: str = f"{remote_host}:{remote_port}"
         logger.info(
