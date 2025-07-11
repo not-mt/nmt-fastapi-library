@@ -48,6 +48,9 @@ class RequestDurationMiddleware(BaseHTTPMiddleware):
         remote_host: str = request.client.host if request.client else "0.0.0.0"
         remote_port: int = request.client.port if request.client else 0
 
+        for header in request.headers:
+            logger.debug(f"Header: {header} = {request.headers[header]}")
+
         # Iterate over header names and use the first found value as remote_host
         for header_name in self.header_names:
             header_value: str | None = request.headers.get(header_name)
