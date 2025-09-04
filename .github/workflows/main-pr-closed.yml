@@ -43,7 +43,7 @@ jobs:
       - name: Generate coverage and test reports
         run: |
           poetry run pytest \
-            --cov=app \
+            --cov=nmtfast \
             --cov-report term \
             --cov-report=xml:coverage.xml \
             --junitxml=junit.xml \
