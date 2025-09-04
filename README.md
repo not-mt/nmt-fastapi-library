@@ -1,5 +1,7 @@
 # nmt-fastapi-library
 
+[![codecov](https://codecov.io/github/not-mt/nmt-fastapi-library/branch/main/graph/badge.svg)](https://codecov.io/github/not-mt/nmt-fastapi-library)
+
 **nmtfast** (not-MT for FastAPI) is a Python module designed to provide reusable utilities, middleware, and access control mechanisms for FastAPI-based microservices and web applications.
 
 ## Features
