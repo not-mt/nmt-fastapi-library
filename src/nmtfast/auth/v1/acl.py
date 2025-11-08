@@ -9,6 +9,7 @@ import re
 
 from pydantic import BaseModel, field_serializer
 
+from nmtfast.auth.v1.exceptions import AuthorizationError
 from nmtfast.settings.v1.schemas import SectionACL
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,11 @@ class AuthSuccess(BaseModel):
 
 
 async def check_acl(
-    section: str, acls: list[SectionACL], method: str, payload: dict = dict()
+    section: str,
+    acls: list[SectionACL],
+    method: str,
+    payload: dict = dict(),
+    raise_on_failure: bool = True,
 ) -> bool:
     """
     Checks if a client is permitted to access a section based on provided ACLs.
@@ -47,11 +52,15 @@ async def check_acl(
     Args:
         section: The section of the resource being accessed (e.g., "widgets", "users").
         acls: A list of SectionACL objects representing the client's access permissions.
-        method: The HTTP method or operation being performed (e.g., "GET", "POST", "DELETE").
+        method: The method or operation being performed (e.g., "view", "edit", "delete").
         payload: An optional dictionary representing the request body or payload.
+        raise_on_failure: If True, raises AuthorizationError on access denial.
 
     Returns:
         bool: True if the client is permitted to access the section, False otherwise.
+
+    Raises:
+        AuthorizationError: If access is denied and raise_on_failure is True.
     """
     for acl in acls:
         section_regex = acl.section_regex
@@ -89,7 +98,18 @@ async def check_acl(
         #         return False  # filter specified a field that does not exist in the payload.
 
         logger.debug("All filters failed")
+        if raise_on_failure:
+            raise AuthorizationError(
+                f"Access denied: No ACLs granted '{method}' permission "
+                f"for '{section}' section!"
+            )
+
         return False  # all filters failed, access denied
 
     logger.debug("No sections matched")
+    if raise_on_failure:
+        raise AuthorizationError(
+            f"Access denied: no ACLs matches for '{section}' section!"
+        )
+
     return False  # no matching section or permission
