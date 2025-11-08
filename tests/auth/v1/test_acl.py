@@ -9,6 +9,7 @@ import json
 import pytest
 
 from nmtfast.auth.v1.acl import AuthSuccess, check_acl
+from nmtfast.auth.v1.exceptions import AuthorizationError
 from nmtfast.settings.v1.schemas import SectionACL
 
 
@@ -20,7 +21,8 @@ async def test_check_acl_payload_none():
     Ensures that the function correctly handles the case where no payload is provided.
     """
     acls = [SectionACL(section_regex="widgets", permissions=["read"])]
-    result = await check_acl(section="widgets", acls=acls, method="read", payload=None)
+    # pass empty dict to satisfy function type annotation for payload
+    result = await check_acl(section="widgets", acls=acls, method="read", payload={})
     assert result is True
 
 
@@ -32,7 +34,9 @@ async def test_check_acl_section_regex_no_match():
     Verifies that the function returns False when the section does not match any ACL.
     """
     acls = [SectionACL(section_regex="users", permissions=["read"])]
-    result = await check_acl(section="widgets", acls=acls, method="read")
+    result = await check_acl(
+        section="widgets", acls=acls, method="read", raise_on_failure=False
+    )
     assert result is False
 
 
@@ -68,8 +72,32 @@ async def test_check_acl_permission_denied():
     Ensures that the function denies access when the method is not in the permissions list.
     """
     acls = [SectionACL(section_regex="widgets", permissions=["read"])]
-    result = await check_acl(section="widgets", acls=acls, method="delete")
+    result = await check_acl(
+        section="widgets", acls=acls, method="delete", raise_on_failure=False
+    )
     assert result is False
+
+
+@pytest.mark.asyncio
+async def test_check_acl_section_regex_no_match_raises():
+    """
+    Tests that check_acl raises AuthorizationError when no ACL section matches
+    and raise_on_failure is True (default).
+    """
+    acls = [SectionACL(section_regex="users", permissions=["read"])]
+    with pytest.raises(AuthorizationError):
+        await check_acl(section="widgets", acls=acls, method="read")
+
+
+@pytest.mark.asyncio
+async def test_check_acl_permission_denied_raises():
+    """
+    Tests that check_acl raises AuthorizationError when a section matches but the
+    requested method is not permitted and raise_on_failure is True (default).
+    """
+    acls = [SectionACL(section_regex="widgets", permissions=["read"])]
+    with pytest.raises(AuthorizationError):
+        await check_acl(section="widgets", acls=acls, method="delete")
 
 
 # Placeholders for future filter tests
