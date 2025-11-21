@@ -1,6 +1,6 @@
 [project]
 name = "nmtfast"
-version = "1.0.0"
+version = "1.1.0"
 description = "Shared library for nmtfast apps"
 authors = [
     {name = "Alexander Haye", email = "ahayehaye@not-mt.dev"}
@@ -148,8 +148,8 @@ cache-dir = ".local/ruff_cache"
 #   later, if necessary.
 #name = "cz_customize"
 name = "cz_conventional_commits"
-version = "1.0.0"
-changelog_start_rev = "v1.0.0"
+version = "1.1.0"
+changelog_start_rev = "v1.1.0"
 template = "changelog.j2"
 tag_format = "v$version"
 version_provider = "pep621"
