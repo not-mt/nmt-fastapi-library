@@ -1,6 +1,6 @@
 [project]
 name = "nmtfast"
-version = "0.2.0"
+version = "1.0.0"
 description = "Shared library for nmtfast apps"
 authors = [
     {name = "Alexander Haye", email = "ahayehaye@not-mt.dev"}
@@ -140,6 +140,21 @@ exclude_lines = [
 [tool.ruff]
 cache-dir = ".local/ruff_cache"
 
+[tool.commitizen]
+# NOTE: we are not customizing for now, even though we would really like to
+#   support "chore" and "revert" CC types when using `cz commit`; however,
+#   it's a ton of extra boilerplate configuration, and learning how to do CC
+#   commits by hand with git commit isn't _that_ hard! We can revisit this
+#   later, if necessary.
+#name = "cz_customize"
+name = "cz_conventional_commits"
+version = "1.0.0"
+changelog_start_rev = "v1.0.0"
+template = "changelog.j2"
+tag_format = "v$version"
+version_provider = "pep621"
+version_files = ["pyproject.toml"]
+
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
 pytest-cov = "^6.0.0"
@@ -153,3 +168,5 @@ pydoclint = "^0.6.4"
 pydocstyle = "^6.3.0"
 black = "^25.1.0"
 isort = "^6.0.1"
+commitizen = "^4.10.0"
+gitlint = "^0.19.1"
