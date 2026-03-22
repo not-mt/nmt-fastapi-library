@@ -1,3 +1,7 @@
+## v1.2.0 (2026-03-22)
+
+    - **feat**: add PKCE auth code support (4bb7478)
+
 ## v1.1.2 (2026-03-14)
 
     - **fix**: security updates 3/2026 (b2be7b3)
