@@ -73,12 +73,18 @@ async def check_acl(
 
         # allow if the section matched, and * is in the and filters is empty
         if "*" in permissions and not filters:
-            logger.debug("Allow '*' and empty filter list")
+            logger.debug(
+                f"Allow '*' and empty filter list principal: "
+                f"{acl.principal_name} (memo: {acl.memo})"
+            )
             return True
 
         # allow if the specific permission is granted
         if "*" not in permissions and method in permissions:
-            logger.debug(f"Allow method '{method}': permissions: {permissions}")
+            logger.debug(
+                f"Allow method '{method}': permissions: {permissions} "
+                f"principal: {acl.principal_name} (memo: {acl.memo})"
+            )
             return True
 
         # TODO: add support for filters later
@@ -91,7 +97,11 @@ async def check_acl(
         #     if action == "allow" and scope == "payload" and field and match_regex:
         #         if payload and field in payload:
         #             if re.match(match_regex, str(payload[field])):
-        #                 logger.debug(f"Filter matched '{match_regex}' to '{str(payload[field])}'")
+        #                 logger.debug(
+        #                     f"Filter matched '{match_regex}' to "
+        #                     f"'{str(payload[field])}' principal: "
+        #                     f"{acl.principal_name} (memo: {acl.memo})"
+        #                 )
         #                 return True  # filter matched
         #     else:
         #         logger.debug("Filter did not match")

@@ -69,7 +69,12 @@ async def test_authenticate_api_key_valid_with_acls():
     api_key = "test_api_key"
     hashed_key = ph.hash(api_key)
     mock_acls = [SectionACL(section_regex=".*", permissions=["read"])]
-    mock_auth_info = AuthSuccess(name=api_key, acls=mock_acls)
+    mock_auth_info = AuthSuccess(
+        name=api_key,
+        acls=[
+            SectionACL(section_regex=".*", permissions=["read"], principal_name=api_key)
+        ],
+    )
 
     auth_settings = AuthSettings(
         swagger_token_url="test",

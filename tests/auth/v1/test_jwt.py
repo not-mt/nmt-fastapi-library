@@ -15,6 +15,8 @@ from jwt import DecodeError, ExpiredSignatureError, InvalidTokenError
 from nmtfast.auth.v1.acl import AuthSuccess
 from nmtfast.auth.v1.exceptions import AuthenticationError, AuthorizationError
 from nmtfast.auth.v1.jwt import (
+    _resolve_group_acls,
+    _resolve_user_acls,
     authenticate_token,
     decode_jwt_part,
     get_claims_jwks,
@@ -24,7 +26,9 @@ from nmtfast.settings.v1.schemas import (
     AuthSettings,
     IDProvider,
     IncomingAuthClient,
+    IncomingAuthGroup,
     IncomingAuthSettings,
+    IncomingAuthUser,
     SectionACL,
 )
 
@@ -97,6 +101,28 @@ async def test_get_claims_jwks(mock_jwks_client):
     ):
         with pytest.raises(AuthenticationError, match="Invalid"):
             await get_claims_jwks("test.token", "https://example.com/jwks")
+
+
+@pytest.mark.asyncio
+@patch("nmtfast.auth.v1.jwt.PyJWKClient")
+async def test_get_claims_jwks_with_audience(mock_jwks_client):
+    """
+    Test that an audience parameter is passed through to jwt.decode.
+    """
+    mock_key = AsyncMock()
+    mock_key.key = "test-key"
+    mock_jwks_client.return_value.get_signing_key_from_jwt.return_value = mock_key
+
+    with patch(
+        "nmtfast.auth.v1.jwt.jwt.decode",
+        return_value={"iss": "test-issuer", "aud": "my-aud"},
+    ) as mock_decode:
+        claims = await get_claims_jwks(
+            "test.token", "https://example.com/jwks", audience="my-aud"
+        )
+        assert claims == {"iss": "test-issuer", "aud": "my-aud"}
+        call_kwargs = mock_decode.call_args
+        assert call_kwargs.kwargs["audience"] == "my-aud"
 
 
 @pytest.mark.asyncio
@@ -188,7 +214,12 @@ async def test_authenticate_token_success():
     )
     mock_token = "valid.token"
     expected_auth_info = AuthSuccess(
-        name="client1", acls=[SectionACL(section_regex=".*", permissions=["read"])]
+        name="client1",
+        acls=[
+            SectionACL(
+                section_regex=".*", permissions=["read"], principal_name="client1"
+            )
+        ],
     )
 
     mock_claims = {
@@ -210,7 +241,9 @@ async def test_authenticate_token_success():
         result = await authenticate_token(mock_token, auth_settings)
         assert result == expected_auth_info
         mock_get_provider.assert_called_once_with(mock_token, auth_settings)
-        mock_get_claims.assert_called_once_with(mock_token, "https://example.com/jwks")
+        mock_get_claims.assert_called_once_with(
+            mock_token, "https://example.com/jwks", None
+        )
 
 
 @pytest.mark.asyncio
@@ -352,7 +385,11 @@ async def test_authenticate_token_multiple_clients():
         ),
     )
     mock_token = "valid.token"
-    mock_acls = [SectionACL(section_regex="specific", permissions=["write"])]
+    mock_acls = [
+        SectionACL(
+            section_regex="specific", permissions=["write"], principal_name="client2"
+        )
+    ]
     mock_auth_info = AuthSuccess(name="client2", acls=mock_acls)
 
     with (
@@ -485,3 +522,546 @@ async def test_authenticate_token_only_wrong_provider_clients():
     ):
         with pytest.raises(AuthorizationError, match="Invalid client"):
             await authenticate_token(mock_token, auth_settings)
+
+
+# ---------------------------------------------------------------------------
+# Static user ACL resolution tests
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_user_acls_match():
+    """
+    Test that _resolve_user_acls returns ACLs when a user's claims match.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            users={
+                "alice": IncomingAuthUser(
+                    provider="test-idp",
+                    claims={"sub": "alice-uuid"},
+                    acls=[SectionACL(section_regex="^admin$", permissions=["*"])],
+                )
+            },
+        ),
+    )
+    claims = {"sub": "alice-uuid", "iss": "https://example.com"}
+    name, acls = _resolve_user_acls(claims, auth_settings, "test-idp")
+    assert name == "alice"
+    assert len(acls) == 1
+    assert acls[0].section_regex == "^admin$"
+    assert acls[0].principal_name == "alice"
+
+
+def test_resolve_user_acls_no_match():
+    """
+    Test that _resolve_user_acls returns (None, []) when no user matches.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            users={
+                "alice": IncomingAuthUser(
+                    provider="test-idp",
+                    claims={"sub": "alice-uuid"},
+                    acls=[SectionACL(section_regex="^admin$", permissions=["*"])],
+                )
+            },
+        ),
+    )
+    claims = {"sub": "bob-uuid", "iss": "https://example.com"}
+    name, acls = _resolve_user_acls(claims, auth_settings, "test-idp")
+    assert name is None
+    assert acls == []
+
+
+def test_resolve_user_acls_wrong_provider():
+    """
+    Test that _resolve_user_acls skips users with a different provider.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            users={
+                "alice": IncomingAuthUser(
+                    provider="other-idp",
+                    claims={"sub": "alice-uuid"},
+                    acls=[SectionACL(section_regex="^admin$", permissions=["*"])],
+                )
+            },
+        ),
+    )
+    claims = {"sub": "alice-uuid", "iss": "https://example.com"}
+    name, acls = _resolve_user_acls(claims, auth_settings, "test-idp")
+    assert name is None
+    assert acls == []
+
+
+def test_resolve_user_acls_empty_users():
+    """
+    Test backward compatibility when no users are configured.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(),
+    )
+    claims = {"sub": "alice-uuid"}
+    name, acls = _resolve_user_acls(claims, auth_settings, "test-idp")
+    assert name is None
+    assert acls == []
+
+
+# ---------------------------------------------------------------------------
+# Static group ACL resolution tests
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_group_acls_match():
+    """
+    Test that _resolve_group_acls returns ACLs when JWT groups claim matches.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+                groups_claim="groups",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            groups={
+                "netadmin": IncomingAuthGroup(
+                    provider="test-idp",
+                    acls=[SectionACL(section_regex="^.*$", permissions=["*"])],
+                )
+            },
+        ),
+    )
+    claims = {"sub": "alice", "groups": ["netadmin", "users"]}
+    acls = _resolve_group_acls(claims, auth_settings, "test-idp")
+    assert len(acls) == 1
+    assert acls[0].permissions == ["*"]
+    assert acls[0].principal_name == "netadmin"
+
+
+def test_resolve_group_acls_multiple_groups():
+    """
+    Test that _resolve_group_acls merges ACLs from multiple matched groups.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            groups={
+                "netadmin": IncomingAuthGroup(
+                    provider="test-idp",
+                    acls=[SectionACL(section_regex="^network$", permissions=["*"])],
+                ),
+                "devops": IncomingAuthGroup(
+                    provider="test-idp",
+                    acls=[SectionACL(section_regex="^deploy$", permissions=["read"])],
+                ),
+            },
+        ),
+    )
+    claims = {"sub": "alice", "groups": ["netadmin", "devops"]}
+    acls = _resolve_group_acls(claims, auth_settings, "test-idp")
+    assert len(acls) == 2
+    regexes = {a.section_regex for a in acls}
+    assert regexes == {"^network$", "^deploy$"}
+    principals = {a.principal_name for a in acls}
+    assert principals == {"netadmin", "devops"}
+
+
+def test_resolve_group_acls_no_groups_claim():
+    """
+    Test that _resolve_group_acls returns [] when JWT has no groups claim.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            groups={
+                "netadmin": IncomingAuthGroup(
+                    provider="test-idp",
+                    acls=[SectionACL(section_regex="^.*$", permissions=["*"])],
+                )
+            },
+        ),
+    )
+    claims = {"sub": "alice"}
+    acls = _resolve_group_acls(claims, auth_settings, "test-idp")
+    assert acls == []
+
+
+def test_resolve_group_acls_wrong_provider():
+    """
+    Test that _resolve_group_acls skips groups with a different provider.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            groups={
+                "netadmin": IncomingAuthGroup(
+                    provider="other-idp",
+                    acls=[SectionACL(section_regex="^.*$", permissions=["*"])],
+                )
+            },
+        ),
+    )
+    claims = {"sub": "alice", "groups": ["netadmin"]}
+    acls = _resolve_group_acls(claims, auth_settings, "test-idp")
+    assert acls == []
+
+
+def test_resolve_group_acls_custom_claim_name():
+    """
+    Test that _resolve_group_acls respects IDProvider.groups_claim.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+                groups_claim="roles",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            groups={
+                "admin_role": IncomingAuthGroup(
+                    provider="test-idp",
+                    acls=[SectionACL(section_regex="^admin$", permissions=["*"])],
+                )
+            },
+        ),
+    )
+    # "groups" is present but the provider uses "roles"
+    claims = {"sub": "alice", "groups": ["admin_role"], "roles": ["admin_role"]}
+    acls = _resolve_group_acls(claims, auth_settings, "test-idp")
+    assert len(acls) == 1
+    assert acls[0].section_regex == "^admin$"
+
+
+def test_resolve_group_acls_non_string_group_name():
+    """
+    Test that _resolve_group_acls skips non-string entries in the groups claim.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            groups={
+                "netadmin": IncomingAuthGroup(
+                    provider="test-idp",
+                    acls=[SectionACL(section_regex="^.*$", permissions=["*"])],
+                )
+            },
+        ),
+    )
+    claims = {"sub": "alice", "groups": [123, None, "netadmin"]}
+    acls = _resolve_group_acls(claims, auth_settings, "test-idp")
+    assert len(acls) == 1
+    assert acls[0].principal_name == "netadmin"
+
+
+def test_resolve_group_acls_unknown_provider():
+    """
+    Test that _resolve_group_acls returns [] when provider is not in id_providers.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(),
+    )
+    claims = {"sub": "alice", "groups": ["netadmin"]}
+    acls = _resolve_group_acls(claims, auth_settings, "nonexistent-idp")
+    assert acls == []
+
+
+def test_resolve_group_acls_empty_groups_config():
+    """
+    Test backward compatibility when no groups are configured.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(),
+    )
+    claims = {"sub": "alice", "groups": ["netadmin"]}
+    acls = _resolve_group_acls(claims, auth_settings, "test-idp")
+    assert acls == []
+
+
+# ---------------------------------------------------------------------------
+# Composite ACL tests (authenticate_token with users + groups)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_authenticate_token_composite_client_and_user():
+    """
+    Test that authenticate_token merges client and user ACLs, and returns the
+    user name instead of the client name.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            clients={
+                "web_client": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"azp": "web-app"},
+                    acls=[SectionACL(section_regex="^widgets$", permissions=["read"])],
+                )
+            },
+            users={
+                "alice": IncomingAuthUser(
+                    provider="test-idp",
+                    claims={"sub": "alice-uuid"},
+                    acls=[SectionACL(section_regex="^admin$", permissions=["*"])],
+                )
+            },
+        ),
+    )
+    mock_claims = {
+        "sub": "alice-uuid",
+        "azp": "web-app",
+        "iss": "https://example.com",
+    }
+
+    with (
+        patch("nmtfast.auth.v1.jwt.get_idp_provider", return_value="test-idp"),
+        patch("nmtfast.auth.v1.jwt.get_claims_jwks", return_value=mock_claims),
+    ):
+        result = await authenticate_token("valid.token", auth_settings)
+        assert result.name == "alice"
+        assert len(result.acls) == 2
+        regexes = {a.section_regex for a in result.acls}
+        assert regexes == {"^widgets$", "^admin$"}
+        principals = {a.principal_name for a in result.acls}
+        assert principals == {"web_client", "alice"}
+
+
+@pytest.mark.asyncio
+async def test_authenticate_token_composite_client_and_groups():
+    """
+    Test that authenticate_token merges client and group ACLs when no user
+    matches (client name is kept).
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            clients={
+                "web_client": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"azp": "web-app"},
+                    acls=[SectionACL(section_regex="^widgets$", permissions=["read"])],
+                )
+            },
+            groups={
+                "netadmin": IncomingAuthGroup(
+                    provider="test-idp",
+                    acls=[SectionACL(section_regex="^network$", permissions=["*"])],
+                )
+            },
+        ),
+    )
+    mock_claims = {
+        "azp": "web-app",
+        "iss": "https://example.com",
+        "groups": ["netadmin"],
+    }
+
+    with (
+        patch("nmtfast.auth.v1.jwt.get_idp_provider", return_value="test-idp"),
+        patch("nmtfast.auth.v1.jwt.get_claims_jwks", return_value=mock_claims),
+    ):
+        result = await authenticate_token("valid.token", auth_settings)
+        assert result.name == "web_client"
+        assert len(result.acls) == 2
+        regexes = {a.section_regex for a in result.acls}
+        assert regexes == {"^widgets$", "^network$"}
+        principals = {a.principal_name for a in result.acls}
+        assert principals == {"web_client", "netadmin"}
+
+
+@pytest.mark.asyncio
+async def test_authenticate_token_composite_all_sources():
+    """
+    Test that authenticate_token merges client + user + groups ACLs.
+    User name takes precedence.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            clients={
+                "web_client": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"azp": "web-app"},
+                    acls=[SectionACL(section_regex="^widgets$", permissions=["read"])],
+                )
+            },
+            users={
+                "alice": IncomingAuthUser(
+                    provider="test-idp",
+                    claims={"sub": "alice-uuid"},
+                    acls=[SectionACL(section_regex="^admin$", permissions=["*"])],
+                )
+            },
+            groups={
+                "netadmin": IncomingAuthGroup(
+                    provider="test-idp",
+                    acls=[SectionACL(section_regex="^network$", permissions=["*"])],
+                ),
+                "devops": IncomingAuthGroup(
+                    provider="test-idp",
+                    acls=[SectionACL(section_regex="^deploy$", permissions=["write"])],
+                ),
+            },
+        ),
+    )
+    mock_claims = {
+        "sub": "alice-uuid",
+        "azp": "web-app",
+        "iss": "https://example.com",
+        "groups": ["netadmin", "devops"],
+    }
+
+    with (
+        patch("nmtfast.auth.v1.jwt.get_idp_provider", return_value="test-idp"),
+        patch("nmtfast.auth.v1.jwt.get_claims_jwks", return_value=mock_claims),
+    ):
+        result = await authenticate_token("valid.token", auth_settings)
+        assert result.name == "alice"
+        assert len(result.acls) == 4
+        regexes = {a.section_regex for a in result.acls}
+        assert regexes == {"^widgets$", "^admin$", "^network$", "^deploy$"}
+        principals = {a.principal_name for a in result.acls}
+        assert principals == {"web_client", "alice", "netadmin", "devops"}
+
+
+@pytest.mark.asyncio
+async def test_authenticate_token_backward_compat_no_users_no_groups():
+    """
+    Test that authenticate_token behavior is identical to prior versions when
+    no users or groups are configured.
+    """
+    auth_settings = AuthSettings(
+        swagger_token_url="https://swagger.example.com/token",
+        id_providers={
+            "test-idp": IDProvider(
+                type="jwks",
+                issuer_regex=r"^https://example.com/?$",
+                jwks_endpoint="https://example.com/jwks",
+            )
+        },
+        incoming=IncomingAuthSettings(
+            clients={
+                "client1": IncomingAuthClient(
+                    provider="test-idp",
+                    claims={"sub": "test-user"},
+                    acls=[SectionACL(section_regex=".*", permissions=["read"])],
+                )
+            },
+        ),
+    )
+    mock_claims = {"sub": "test-user", "iss": "https://example.com"}
+
+    with (
+        patch("nmtfast.auth.v1.jwt.get_idp_provider", return_value="test-idp"),
+        patch("nmtfast.auth.v1.jwt.get_claims_jwks", return_value=mock_claims),
+    ):
+        result = await authenticate_token("valid.token", auth_settings)
+        assert result.name == "client1"
+        assert len(result.acls) == 1
+        assert result.acls[0].section_regex == ".*"
+        assert result.acls[0].principal_name == "client1"

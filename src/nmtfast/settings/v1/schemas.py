@@ -23,6 +23,7 @@ class IDProvider(BaseModel):
         introspection_endpoint: URL for token introspection endpoint.
         keyid_enabled: Whether key ID verification is enabled.
         keyid_endpoint: URL for key ID verification endpoint.
+        groups_claim: JWT claim name containing group memberships.
     """
 
     type: str = "jwks"
@@ -34,6 +35,7 @@ class IDProvider(BaseModel):
     introspection_endpoint: str = "http://localhost/introspection"
     keyid_enabled: bool = False
     keyid_endpoint: str = "http://localhost/keyid"
+    groups_claim: str = "groups"
 
 
 # TODO: add support for filters later
@@ -53,10 +55,14 @@ class SectionACL(BaseModel):
     Attributes:
         section_regex: Regex pattern for matching section names.
         permissions: List of granted permissions (e.g., ["read", "write"]).
+        memo: Optional human-readable note describing this ACL entry.
+        principal_name: auto-filled name of the principal (API key or OAuth client).
     """
 
     section_regex: str
     permissions: list[str]
+    memo: Optional[str] = None
+    principal_name: Optional[str] = None  # NOTE: do not fill this manually
     # TODO: add support for filters later
     # filters: list[FilterACL] = []
 
@@ -99,6 +105,48 @@ class IncomingAuthApiKey(BaseModel):
     acls: list[SectionACL]
 
 
+class IncomingAuthUser(BaseModel):
+    """
+    Incoming static user configuration.
+
+    A static user is matched by provider and JWT claims (same semantics as
+    IncomingAuthClient). When a user matches, its ACLs are merged with the
+    client ACLs to form a composite permission set.
+
+    Attributes:
+        contact: Contact information for the user.
+        memo: Additional notes about the user.
+        provider: Associated ID provider name.
+        claims: Dictionary of claims that must all match the JWT.
+        acls: List of section access control rules.
+    """
+
+    contact: str = ""
+    memo: str = ""
+    provider: str
+    claims: dict[str, str]
+    acls: list[SectionACL]
+
+
+class IncomingAuthGroup(BaseModel):
+    """
+    Incoming static group configuration.
+
+    A group is matched when its key name appears in the JWT groups claim
+    (configured via IDProvider.groups_claim) and the provider matches.
+    When a group matches, its ACLs are merged with the client and user ACLs.
+
+    Attributes:
+        memo: Additional notes about the group.
+        provider: Associated ID provider name.
+        acls: List of section access control rules.
+    """
+
+    memo: str = ""
+    provider: str
+    acls: list[SectionACL]
+
+
 class IncomingAuthSettings(BaseModel):
     """
     Incoming authentication settings.
@@ -106,10 +154,14 @@ class IncomingAuthSettings(BaseModel):
     Attributes:
         clients: Dictionary of OAuth client configurations.
         api_keys: Dictionary of API key configurations.
+        users: Dictionary of static user configurations.
+        groups: Dictionary of static group configurations.
     """
 
     clients: dict[str, IncomingAuthClient] = {}
     api_keys: dict[str, IncomingAuthApiKey] = {}
+    users: dict[str, IncomingAuthUser] = {}
+    groups: dict[str, IncomingAuthGroup] = {}
 
 
 class OutgoingAuthClient(BaseModel):
@@ -168,21 +220,85 @@ class OutgoingAuthSettings(BaseModel):
     headers: dict[str, OutgoingAuthHeaders] = {}
 
 
+class WebAuthClientSettings(BaseModel):
+    """
+    OIDC client configuration for interactive web login (Authorization Code flow).
+
+    Attributes:
+        provider: References an IDProvider key in id_providers.
+        client_id: The OAuth2 client ID registered with the provider.
+        client_secret: The OAuth2 client secret registered with the provider.
+        redirect_uri: The callback URI the provider will redirect to after login.
+        scopes: List of OAuth2 scopes to request.
+        pkce_enabled: Whether to use PKCE (Proof Key for Code Exchange).
+        refresh_enabled: Whether to request and use refresh tokens.
+        token_endpoint_auth_method: How to send client credentials to the token
+            endpoint.
+        displayname_claims: List of claim names to try to use for the display name.
+        userid_claims: List of claim names to try to use for the internal user ID.
+        session_claims: List of JWT claim names to extract and store in the session.
+    """
+
+    provider: str
+    client_id: str
+    client_secret: str
+    redirect_uri: str
+    scopes: list[str] = ["openid"]
+    pkce_enabled: bool = False
+    refresh_enabled: bool = False
+    token_endpoint_auth_method: Literal[
+        "client_secret_basic",
+        "client_secret_post",
+    ] = "client_secret_basic"
+    displayname_claims: list[str] = ["preferred_username"]
+    userid_claims: list[str] = ["sub"]
+    session_claims: list[str] = ["sub", "name", "preferred_username", "email"]
+
+
+class SessionSettings(BaseModel):
+    """
+    Session cookie and storage configuration.
+
+    Attributes:
+        cookie_name: Name of the session cookie.
+        cookie_secure: Whether the cookie requires HTTPS.
+        cookie_httponly: Whether the cookie is inaccessible to JavaScript.
+        cookie_samesite: SameSite attribute for the cookie.
+        cookie_path: URL path scope for the cookie.
+        session_ttl: Session time-to-live in seconds.
+    """
+
+    cookie_name: str = "session_id"
+    cookie_secure: bool = True
+    cookie_httponly: bool = True
+    cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    cookie_path: str = "/"
+    session_ttl: int = 3600
+
+
 class AuthSettings(BaseModel):
     """
     Authentication and authorization configuration.
 
     Attributes:
         swagger_token_url: URL for Swagger/OpenAPI token authentication.
+        swagger_authorize_url: Optional authorization endpoint URL to enable the
+            OAuth2 authorization code flow in Swagger UI. When set, the Authorize
+            dialog will show an authorizationCode flow entry.
         id_providers: Dictionary of configured ID providers.
         incoming: Settings related to incoming authentication clients, keys, etc.
         outgoing: Settings related to outgoing authentication to other services.
+        web_auth: Optional OIDC client settings for interactive web login.
+        session: Optional session cookie and storage settings.
     """
 
     swagger_token_url: str
+    swagger_authorize_url: Optional[str] = None
     id_providers: dict[str, IDProvider]
     incoming: IncomingAuthSettings = IncomingAuthSettings()
     outgoing: OutgoingAuthSettings = OutgoingAuthSettings()
+    web_auth: Optional[WebAuthClientSettings] = None
+    session: Optional[SessionSettings] = None
 
 
 class DiscoveredService(BaseModel):
