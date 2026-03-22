@@ -64,7 +64,12 @@ async def authenticate_api_key(
     for keyname, eval_key_conf in auth_settings.incoming.api_keys.items():
         if await verify_api_key(eval_key_conf.algo, api_key, eval_key_conf.hash):
             if eval_key_conf.acls:
-                return AuthSuccess(name=keyname, acls=eval_key_conf.acls)
+                stamped_acls = [
+                    # NOTE: stamp each ACL with the principal_name for logging
+                    acl.model_copy(update={"principal_name": keyname})
+                    for acl in eval_key_conf.acls
+                ]
+                return AuthSuccess(name=keyname, acls=stamped_acls)
             raise AuthorizationError("Invalid API key (no permissions)")
 
     raise AuthenticationError("Unknown API key")

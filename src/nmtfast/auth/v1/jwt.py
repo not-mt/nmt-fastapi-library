@@ -15,7 +15,11 @@ from fastapi import HTTPException
 from jwt import DecodeError, PyJWKClient
 
 from nmtfast.auth.v1.acl import AuthSuccess
-from nmtfast.settings.v1.schemas import AuthSettings, IncomingAuthClient
+from nmtfast.settings.v1.schemas import (
+    AuthSettings,
+    IncomingAuthClient,
+    SectionACL,
+)
 
 from .exceptions import AuthenticationError, AuthorizationError
 
@@ -64,13 +68,19 @@ def decode_jwt_part(token: str, part_name: str) -> dict:
         raise ValueError(f"{part_name.capitalize()} decoding error: {e}")
 
 
-async def get_claims_jwks(token: str, jwks_url: str) -> dict[str, str]:
+async def get_claims_jwks(
+    token: str,
+    jwks_url: str,
+    audience: str | None = None,
+) -> dict[str, str]:
     """
     Parses and verifies a JWT using JWKS.
 
     Args:
         token: The JWT token string.
         jwks_url: The JWKS endpoint to retrieve public keys.
+        audience: Optional expected audience claim. When provided, the aud claim
+            is validated against this value.
 
     Returns:
         dict[str, str]: Decoded JWT claims.
@@ -81,11 +91,18 @@ async def get_claims_jwks(token: str, jwks_url: str) -> dict[str, str]:
     try:
         jwks_client = PyJWKClient(jwks_url)
         signing_key = jwks_client.get_signing_key_from_jwt(token)
+        decode_options: dict = {"require": ["exp", "iss"]}
+        decode_kwargs: dict = {
+            "algorithms": ["RS256"],
+            "options": decode_options,
+            "leeway": 15,
+        }
+        if audience:
+            decode_kwargs["audience"] = audience
         claims = jwt.decode(
             token,
             signing_key.key,
-            algorithms=["RS256"],
-            options={"require": ["exp", "iss"]},
+            **decode_kwargs,
         )
         return claims
     except (DecodeError, jwt.ExpiredSignatureError, jwt.InvalidTokenError) as exc:
@@ -127,16 +144,106 @@ async def get_idp_provider(token: str, auth_settings: AuthSettings) -> str:
     return provider
 
 
-async def authenticate_token(token: str, auth_settings: AuthSettings) -> AuthSuccess:
+def _resolve_user_acls(
+    claims: dict,
+    auth_settings: AuthSettings,
+    provider: str,
+) -> tuple[str | None, list[SectionACL]]:
+    """
+    Resolve ACLs from static user configurations by matching JWT claims.
+
+    Iterates through configured users and returns the first match where the
+    provider matches and all configured claims are present in the JWT.
+
+    Args:
+        claims: Decoded JWT claims.
+        auth_settings: The auth section of app configuration.
+        provider: The matched identity provider name.
+
+    Returns:
+        tuple[str | None, list[SectionACL]]: A tuple of (user_name, user_acls).
+            Returns (None, []) if no user matches.
+    """
+    for user_name, user_conf in auth_settings.incoming.users.items():
+        if user_conf.provider != provider:
+            continue
+        for claim_name, claim_value in user_conf.claims.items():
+            if claims.get(claim_name) != claim_value:
+                break
+        else:
+            logger.debug(f"Matched static user '{user_name}'")
+            return user_name, [
+                acl.model_copy(update={"principal_name": user_name})
+                for acl in user_conf.acls
+            ]
+
+    return None, []
+
+
+def _resolve_group_acls(
+    claims: dict,
+    auth_settings: AuthSettings,
+    provider: str,
+) -> list[SectionACL]:
+    """
+    Resolve ACLs from static group configurations by matching JWT group claims.
+
+    Reads the groups claim from the JWT (claim name is configured via
+    IDProvider.groups_claim) and matches each group name against the configured
+    groups for the same provider.
+
+    Args:
+        claims: Decoded JWT claims.
+        auth_settings: The auth section of app configuration.
+        provider: The matched identity provider name.
+
+    Returns:
+        list[SectionACL]: Merged ACLs from all matching groups, or [] if none match.
+    """
+    idp_conf = auth_settings.id_providers.get(provider)
+    if idp_conf is None:
+        return []
+
+    groups_claim = idp_conf.groups_claim
+    token_groups = claims.get(groups_claim)
+    if not isinstance(token_groups, list):
+        return []
+
+    group_acls: list[SectionACL] = []
+    for group_name in token_groups:
+        if not isinstance(group_name, str):
+            continue
+        group_conf = auth_settings.incoming.groups.get(group_name)
+        if group_conf is None or group_conf.provider != provider:
+            continue
+        logger.debug(f"Matched static group '{group_name}'")
+        group_acls.extend(
+            acl.model_copy(update={"principal_name": group_name})
+            for acl in group_conf.acls
+        )
+
+    return group_acls
+
+
+async def authenticate_token(
+    token: str,
+    auth_settings: AuthSettings,
+    audience: str | None = None,
+) -> AuthSuccess:
     """
     Authenticate the client using a JWT.
+
+    After matching a client, this function also resolves any configured static
+    user and group ACLs matching the JWT claims and merges them into a composite
+    ACL list (client + user + groups).
 
     Args:
         token: The JWT to authenticate.
         auth_settings: The auth section of app configuration.
+        audience: Optional expected audience claim for token validation.
 
     Returns:
-        AuthSuccess: An object containing the name and ACLs for a JWT.
+        AuthSuccess: An object containing the name and composite ACLs for a JWT.
 
     Raises:
         AuthenticationError: If JWT is invalid (expired, inauthentic, etc).
@@ -149,7 +256,7 @@ async def authenticate_token(token: str, auth_settings: AuthSettings) -> AuthSuc
 
     idp_conf = auth_settings.id_providers[provider]
     if idp_conf.type == "jwks":
-        claims = await get_claims_jwks(token, idp_conf.jwks_endpoint)
+        claims = await get_claims_jwks(token, idp_conf.jwks_endpoint, audience)
     # elif idp_conf.type == "some_other_type":
     # elif idp_conf.type == "some_other_type2":
 
@@ -161,15 +268,29 @@ async def authenticate_token(token: str, auth_settings: AuthSettings) -> AuthSuc
             continue
         for claim_name, claim_value in eval_client_conf.claims.items():
             # NOTE: claims in config must match ALL specified values; abort if
-            #   a single claim does not match
-            if claims[claim_name] != claim_value:
+            #   a single claim does not match or is missing from the token
+            if claims.get(claim_name) != claim_value:
                 break
         else:
             # NOTE: if the all of the claims match then the client is valid
-            auth_info = {"name": keyname, "acls": eval_client_conf.acls}
+            auth_info = {
+                "name": keyname,
+                "acls": [
+                    # NOTE: stamp each ACL with the principal_name for logging
+                    acl.model_copy(update={"principal_name": keyname})
+                    for acl in eval_client_conf.acls
+                ],
+            }
             break
 
     if not auth_info:
         raise AuthorizationError("Invalid client (no permissions)")
 
-    return AuthSuccess(**auth_info)
+    # resolve composite ACLs from static users and groups
+    user_name, user_acls = _resolve_user_acls(claims, auth_settings, provider)
+    group_acls = _resolve_group_acls(claims, auth_settings, provider)
+
+    composite_acls: list[SectionACL] = auth_info["acls"] + user_acls + group_acls
+    resolved_name: str = user_name if user_name else auth_info["name"]
+
+    return AuthSuccess(name=resolved_name, acls=composite_acls)

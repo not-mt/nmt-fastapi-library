@@ -6,7 +6,7 @@
 
 ## Features
 
-- **Access Control (ACLs)**: Fine-grained access rules based on OAuth2 client IDs, API keys, and request parameters.
+- **Access Control (ACLs)**: Fine-grained access rules based on OAuth2 client IDs, API keys, and access/ID token claims.
 - **Authentication Helpers**: Support for validating and enforcing authentication using OAuth2 and API keys.
 - **Middleware Utilities**: Common middleware for logging, request validation, and security.
 - **FastAPI Enhancements**: Helper functions for request handling, response formatting, and more.
@@ -89,4 +89,4 @@ Once files have been customized, you may re-open VS Code using the `nmt-fastapi-
 
 This project is licensed under the [MIT License](LICENSE).
 
-Copyright (c) 2025 Alexander Haye
+Copyright (c) 2026 Alexander Haye
