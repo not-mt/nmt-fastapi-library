@@ -107,19 +107,16 @@ async def check_acl(
         #         logger.debug("Filter did not match")
         #         return False  # filter specified a field that does not exist in the payload.
 
-        logger.debug("All filters failed")
-        if raise_on_failure:
-            raise AuthorizationError(
-                f"Access denied: No ACLs granted '{method}' permission "
-                f"for '{section}' section!"
-            )
+        logger.debug(
+            f"ACL '{acl.principal_name}' (memo: {acl.memo}) did not grant "
+            f"'{method}' permission for '{section}' section, trying next ACL"
+        )
 
-        return False  # all filters failed, access denied
-
-    logger.debug("No sections matched")
+    logger.debug("No ACLs granted access")
     if raise_on_failure:
         raise AuthorizationError(
-            f"Access denied: no ACLs matches for '{section}' section!"
+            f"Access denied: No ACLs granted '{method}' permission "
+            f"for '{section}' section!"
         )
 
     return False  # no matching section or permission
