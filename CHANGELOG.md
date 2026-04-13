@@ -1,3 +1,7 @@
+## v1.2.2 (2026-04-13)
+
+    - **fix**: add missing unit tests (349bb5d)
+
 ## v1.2.1 (2026-04-13)
 
     - **fix**: ACL evaluation ends early (86304b7)
