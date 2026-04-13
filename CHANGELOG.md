@@ -1,3 +1,7 @@
+## v1.2.1 (2026-04-13)
+
+    - **fix**: ACL evaluation ends early (86304b7)
+
 ## v1.2.0 (2026-03-22)
 
     - **feat**: add PKCE auth code support (4bb7478)
