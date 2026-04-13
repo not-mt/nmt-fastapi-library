@@ -100,6 +100,38 @@ async def test_check_acl_permission_denied_raises():
         await check_acl(section="widgets", acls=acls, method="delete")
 
 
+@pytest.mark.asyncio
+async def test_check_acl_tries_all_acls():
+    """
+    Tests that check_acl does not break early when the first ACL matches the section
+    but lacks the required permission. It should continue checking subsequent ACLs.
+
+    Regression test: previously, check_acl would raise/return False immediately if the
+    first matching ACL did not have the needed permission, ignoring later ACLs that
+    might grant access.
+    """
+    acls = [
+        SectionACL(section_regex="widgets", permissions=["read"]),
+        SectionACL(section_regex="widgets", permissions=["delete"]),
+    ]
+    result = await check_acl(section="widgets", acls=acls, method="delete")
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_check_acl_tries_all_acls_raises_when_none_match():
+    """
+    Tests that check_acl raises AuthorizationError after exhausting all ACLs when
+    none grant the required permission.
+    """
+    acls = [
+        SectionACL(section_regex="widgets", permissions=["read"]),
+        SectionACL(section_regex="widgets", permissions=["write"]),
+    ]
+    with pytest.raises(AuthorizationError):
+        await check_acl(section="widgets", acls=acls, method="delete")
+
+
 # Placeholders for future filter tests
 
 
