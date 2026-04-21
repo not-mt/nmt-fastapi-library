@@ -1,3 +1,7 @@
+## v1.2.3 (2026-04-21)
+
+    - **fix**: prepend root_path to openapi.json (d4568ba)
+
 ## v1.2.2 (2026-04-13)
 
     - **fix**: add missing unit tests (349bb5d)
