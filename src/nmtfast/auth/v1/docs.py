@@ -12,7 +12,7 @@ client_secret field for chosen OAuth2 flow types.
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.openapi.docs import (
     get_swagger_ui_html,
     get_swagger_ui_oauth2_redirect_html,
@@ -21,7 +21,8 @@ from fastapi.responses import HTMLResponse
 
 
 def _build_hide_client_secret_css(flow_types: list[str]) -> str:
-    """Build CSS hiding client_secret for chosen OAuth2 flow types.
+    """
+    Build CSS hiding client_secret for chosen OAuth2 flow types.
 
     Build a <style> block that hides the client_secret row in the
     Swagger UI authorization modal for the given OAuth2 flow types.
@@ -79,14 +80,19 @@ def register_swagger_ui(
     )
 
     @app.get("/docs", include_in_schema=False)
-    async def custom_swagger_ui_html() -> HTMLResponse:
+    async def custom_swagger_ui_html(request: Request) -> HTMLResponse:
         """
         Serve Swagger UI with optional CSS overrides injected.
         """
+        root = request.scope.get("root_path", "").rstrip("/")
+        openapi_url = root + (app.openapi_url or "/openapi.json")
+        oauth2_redirect_url = app.swagger_ui_oauth2_redirect_url
+        if oauth2_redirect_url:
+            oauth2_redirect_url = root + oauth2_redirect_url
         html_response = get_swagger_ui_html(
-            openapi_url=app.openapi_url or "/openapi.json",
+            openapi_url=openapi_url,
             title=f"{app.title} - Swagger UI",
-            oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+            oauth2_redirect_url=oauth2_redirect_url,
             init_oauth=app.swagger_ui_init_oauth,
             swagger_ui_parameters=app.swagger_ui_parameters,
         )

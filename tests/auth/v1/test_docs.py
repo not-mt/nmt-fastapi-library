@@ -102,3 +102,37 @@ def test_register_swagger_ui_no_css_by_default(docs_app: FastAPI):
     resp = client.get("/docs")
     body = resp.text
     assert "client_secret_authorizationCode" not in body
+
+
+def test_register_swagger_ui_no_oauth2_redirect_url():
+    """
+    When swagger_ui_oauth2_redirect_url is None the /docs endpoint should still
+    return 200 and the oauth2RedirectUrl line should not appear in the HTML.
+    """
+    no_redirect_app = FastAPI(
+        title="test-app",
+        docs_url=None,
+        swagger_ui_oauth2_redirect_url=None,
+    )
+    register_swagger_ui(no_redirect_app)
+    client = TestClient(no_redirect_app)
+    resp = client.get("/docs")
+    assert resp.status_code == 200
+    assert "oauth2RedirectUrl" not in resp.text
+
+
+def test_register_swagger_ui_prepends_root_path():
+    """
+    If the app has a root_path set, the /docs HTML should have the openapi_url
+    and oauth2_redirect_url correctly prefixed with the root path.
+    """
+    root_app = FastAPI(
+        title="test-app",
+        docs_url=None,
+        root_path="/some/root/path",
+    )
+    register_swagger_ui(root_app)
+    client = TestClient(root_app, root_path="/some/root/path")
+    resp = client.get("/docs")
+    body = resp.text
+    assert "url: '/some/root/path/openapi.json'" in body
