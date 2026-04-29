@@ -1,0 +1,423 @@
+{# Data-driven resource list table with pagination, sorting, search, and bulk actions.
+   Context: resource_config (ResourceConfig), items (list), session, app_name,
+            pagination (PaginationMeta, optional) #}
+
+{# Determine current state from pagination context #}
+{%- set pg = pagination if pagination is defined and pagination else none -%}
+{%- set cur_sort = pg.sort_by if pg else none -%}
+{%- set cur_order = pg.sort_order if pg else 'asc' -%}
+{%- set cur_page = pg.page if pg else 1 -%}
+{%- set cur_page_size = pg.page_size if pg else 10 -%}
+{%- set search_qs = ('&search=' ~ pg.search) if pg and pg.search else '' -%}
+
+<div style="min-width: 850px;
+            --accent-50: {{ resource_config.accent.shade_50 }};
+            --accent-100: {{ resource_config.accent.shade_100 }};
+            --accent-500: {{ resource_config.accent.shade_500 }};
+            --accent-600: {{ resource_config.accent.shade_600 }};">
+<div class="space-y-4">
+
+    {# Header info extracted by JS into the top bar #}
+    <template data-page-header>
+        <h2 class="text-lg font-bold text-stone-800">{{ resource_config.name_plural }}</h2>
+        <div class="header-actions flex items-center gap-2">
+            <button hx-get="{{ resource_config.base_url }}/create"
+                    hx-target="#detail-panel-content"
+                    hx-swap="innerHTML"
+                    class="text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                    style="background-color: {{ resource_config.accent.shade_500 }};"
+                    onmouseover="this.style.backgroundColor='{{ resource_config.accent.shade_600 }}'"
+                    onmouseout="this.style.backgroundColor='{{ resource_config.accent.shade_500 }}'">
+                + New {{ resource_config.name }}
+            </button>
+            <button id="bulk-edit-btn"
+                    onclick="showBulkEditForm()"
+                    class="hidden text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                    style="background-color: {{ resource_config.accent.shade_500 }};"
+                    onmouseover="this.style.backgroundColor='{{ resource_config.accent.shade_600 }}'"
+                    onmouseout="this.style.backgroundColor='{{ resource_config.accent.shade_500 }}'"
+                    title="Edit selected items">
+                <span class="inline-flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    <span id="bulk-edit-count">Edit (0)</span>
+                </span>
+            </button>
+            <button id="bulk-delete-btn"
+                    onclick="showBulkDeleteConfirm()"
+                    class="hidden text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer bg-rose-500 hover:bg-rose-600"
+                    title="Delete selected items">
+                <span class="inline-flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    <span id="bulk-delete-count">Delete (0)</span>
+                </span>
+            </button>
+            <button onclick="showSearchModal()"
+                    class="relative text-stone-600 px-3 py-1.5 rounded-lg text-sm font-medium border border-stone-300 hover:bg-stone-50 transition-colors cursor-pointer"
+                    title="Search">
+                <span class="inline-flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    Search
+                    {%- if pg and pg.search %}
+                    <span class="text-xs text-stone-400">&ldquo;{{ pg.search }}&rdquo;</span>
+                    {%- endif %}
+                </span>
+                {%- if pg and pg.search %}
+                <span class="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-400"></span>
+                {%- endif %}
+            </button>
+        </div>
+    </template>
+
+    <!-- Resource table -->
+    <div class="bg-white rounded-lg border border-stone-200 overflow-hidden">
+        <table class="min-w-full divide-y divide-stone-200">
+            <thead class="bg-stone-50">
+                <tr>
+                    <th class="px-3 py-3 w-10">
+                        <input type="checkbox" onclick="toggleSelectAll(this)"
+                               class="rounded border-stone-300 cursor-pointer">
+                    </th>
+                    {% for field in resource_config.fields %}
+                        {% if field.show_in_list %}
+                            {% if field.sortable and pg %}
+                                {# Sortable column header — click to toggle sort #}
+                                {%- set next_order = 'desc' if cur_sort == field.name and cur_order == 'asc' else 'asc' -%}
+                    <th class="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">
+                        <button hx-get="{{ resource_config.base_url }}?page=1&page_size={{ cur_page_size }}&sort_by={{ field.name }}&sort_order={{ next_order }}{{ search_qs }}"
+                                hx-target="#main-content"
+                                hx-swap="innerHTML"
+                                hx-push-url="true"
+                                class="inline-flex items-center gap-1 cursor-pointer hover:text-stone-700 transition-colors uppercase text-xs font-medium tracking-wider">
+                            {{ field.label }}
+                            {%- if cur_sort == field.name -%}
+                                {% if cur_order == 'asc' %}
+                            <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 11.78a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06 0z" clip-rule="evenodd"/></svg>
+                                {% else %}
+                            <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clip-rule="evenodd"/></svg>
+                                {% endif %}
+                            {%- else -%}
+                            <svg class="h-3 w-3 opacity-0 group-hover:opacity-30" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clip-rule="evenodd"/></svg>
+                            {%- endif %}
+                        </button>
+                    </th>
+                            {% else %}
+                    <th class="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">{{ field.label }}</th>
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
+                    <th class="px-6 py-3 text-right text-xs font-medium text-stone-500 uppercase tracking-wider w-24"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-stone-100">
+                {% if items %}
+                    {% for item in items %}
+                    {%- set item_id = getattr(item, resource_config.id_field) -%}
+                    {%- set item_name = getattr(item, resource_config.display_name_field) -%}
+                    <tr class="hover:bg-stone-50 transition-colors cursor-pointer"
+                        hx-get="{{ resource_config.base_url }}/{{ item_id }}"
+                        hx-target="#detail-panel-content"
+                        hx-swap="innerHTML">
+                        <td class="px-3 py-4 w-10" onclick="event.stopPropagation()">
+                            <input type="checkbox" class="row-check rounded border-stone-300 cursor-pointer"
+                                   value="{{ item_id }}"
+                                   onchange="updateBulkActionButtons()">
+                        </td>
+                        {% for field in resource_config.fields %}
+                            {% if field.show_in_list %}
+                            <td class="px-6 py-4 text-sm
+                                       {{ 'font-medium text-stone-800' if field.is_name else 'text-stone-600' }}
+                                       {{ 'font-mono' if field.monospace else '' }}
+                                       {{ 'truncate max-w-[120px]' if field.truncate else '' }}"
+                                {% if field.truncate %} title="{{ getattr(item, field.name) }}"{% endif %}>
+                                {%- set val = getattr(item, field.name) -%}
+                                {%- if val is none or (val == 0 and not field.is_id and field.field_type != 'number') -%}
+                                    {{ field.nullable_display }}
+                                {%- elif field.truncate and val | string | length > field.truncate -%}
+                                    {{ (val | string)[:field.truncate] }}...
+                                {%- else -%}
+                                    {{ val }}
+                                {%- endif -%}
+                            </td>
+                            {% endif %}
+                        {% endfor %}
+                        <td class="px-6 py-4 text-right" onclick="event.stopPropagation()">
+                            <div class="inline-flex items-center gap-1">
+                                <button hx-get="{{ resource_config.base_url }}/{{ item_id }}/edit"
+                                        hx-target="#detail-panel-content"
+                                        hx-swap="innerHTML"
+                                        class="p-1.5 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+                                        title="Edit">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                    </svg>
+                                </button>
+                                <button onclick="showDeleteModal('{{ resource_config.base_url }}/{{ item_id }}', '{{ resource_config.name }}', '{{ item_name }}')"
+                                        class="p-1.5 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                        title="Delete">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="3 6 5 6 21 6"/>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                        <line x1="10" y1="11" x2="10" y2="17"/>
+                                        <line x1="14" y1="11" x2="14" y2="17"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="{{ resource_config.fields | selectattr('show_in_list') | list | length + 2 }}" class="px-6 py-8 text-center text-stone-400">
+                            No {{ resource_config.name_plural | lower }} found. Create one to get started.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    {# Pagination bar #}
+    {% if pg %}
+    <nav class="flex items-center justify-between pt-2">
+        <div class="flex items-center gap-3">
+            <p class="text-sm text-stone-500">
+                {% if pg.total > 0 %}
+                Showing {{ ((pg.page - 1) * pg.page_size) + 1 }}–{{ [pg.page * pg.page_size, pg.total] | min }} of {{ pg.total }}
+                {% else %}
+                0 results
+                {% endif %}
+            </p>
+            <div class="flex items-center gap-1.5">
+                <label for="page-size-select" class="text-sm text-stone-400">per page</label>
+                <select id="page-size-select"
+                        onchange="htmx.ajax('GET', '{{ resource_config.base_url }}?page=1&page_size=' + this.value + '{% if pg.sort_by %}&sort_by={{ pg.sort_by }}&sort_order={{ pg.sort_order }}{% endif %}{{ search_qs }}', {target:'#main-content', swap:'innerHTML', pushUrl:true})"
+                        class="text-sm text-stone-600 border border-stone-300 rounded-md px-2 py-1 bg-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-stone-400">
+                    {% for size in [10, 50, 100, 500, 1000, 5000] %}
+                    <option value="{{ size }}" {{ 'selected' if pg.page_size == size else '' }}>{{ size }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        {% if pg.total_pages > 1 %}
+        <div class="inline-flex items-center gap-1">
+            {# Previous #}
+            {% if pg.page > 1 %}
+            <button hx-get="{{ resource_config.base_url }}?page={{ pg.page - 1 }}&page_size={{ pg.page_size }}{% if pg.sort_by %}&sort_by={{ pg.sort_by }}&sort_order={{ pg.sort_order }}{% endif %}{{ search_qs }}"
+                    hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true"
+                    class="px-3 py-1.5 text-sm text-stone-600 border border-stone-300 rounded-lg hover:bg-stone-50 cursor-pointer transition-colors">
+                &laquo; Prev
+            </button>
+            {% endif %}
+
+            {# Page numbers #}
+            {%- set window = 2 -%}
+            {%- set start_page = [1, pg.page - window] | max -%}
+            {%- set end_page = [pg.total_pages, pg.page + window] | min -%}
+
+            {% if start_page > 1 %}
+            <button hx-get="{{ resource_config.base_url }}?page=1&page_size={{ pg.page_size }}{% if pg.sort_by %}&sort_by={{ pg.sort_by }}&sort_order={{ pg.sort_order }}{% endif %}{{ search_qs }}"
+                    hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true"
+                    class="px-3 py-1.5 text-sm text-stone-600 border border-stone-300 rounded-lg hover:bg-stone-50 cursor-pointer transition-colors">
+                1
+            </button>
+                {% if start_page > 2 %}
+            <span class="px-1 text-stone-400">&hellip;</span>
+                {% endif %}
+            {% endif %}
+
+            {% for p in range(start_page, end_page + 1) %}
+            <button hx-get="{{ resource_config.base_url }}?page={{ p }}&page_size={{ pg.page_size }}{% if pg.sort_by %}&sort_by={{ pg.sort_by }}&sort_order={{ pg.sort_order }}{% endif %}{{ search_qs }}"
+                    hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true"
+                    class="px-3 py-1.5 text-sm rounded-lg cursor-pointer transition-colors
+                           {{ 'text-white border border-transparent' if p == pg.page else 'text-stone-600 border border-stone-300 hover:bg-stone-50' }}"
+                    {% if p == pg.page %}style="background-color: var(--accent-500);"{% endif %}>
+                {{ p }}
+            </button>
+            {% endfor %}
+
+            {% if end_page < pg.total_pages %}
+                {% if end_page < pg.total_pages - 1 %}
+            <span class="px-1 text-stone-400">&hellip;</span>
+                {% endif %}
+            <button hx-get="{{ resource_config.base_url }}?page={{ pg.total_pages }}&page_size={{ pg.page_size }}{% if pg.sort_by %}&sort_by={{ pg.sort_by }}&sort_order={{ pg.sort_order }}{% endif %}{{ search_qs }}"
+                    hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true"
+                    class="px-3 py-1.5 text-sm text-stone-600 border border-stone-300 rounded-lg hover:bg-stone-50 cursor-pointer transition-colors">
+                {{ pg.total_pages }}
+            </button>
+            {% endif %}
+
+            {# Next #}
+            {% if pg.page < pg.total_pages %}
+            <button hx-get="{{ resource_config.base_url }}?page={{ pg.page + 1 }}&page_size={{ pg.page_size }}{% if pg.sort_by %}&sort_by={{ pg.sort_by }}&sort_order={{ pg.sort_order }}{% endif %}{{ search_qs }}"
+                    hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true"
+                    class="px-3 py-1.5 text-sm text-stone-600 border border-stone-300 rounded-lg hover:bg-stone-50 cursor-pointer transition-colors">
+                Next &raquo;
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </nav>
+    {% endif %}
+
+</div>
+<div id="search-modal-overlay"
+     class="fixed inset-0 z-[60] flex items-start justify-center pt-24 hidden"
+     onclick="if(event.target===this)closeSearchModal()">
+    <div class="absolute inset-0 bg-black/40"></div>
+    <div class="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-stone-800">Search {{ resource_config.name_plural }}</h3>
+        <input id="search-input" type="text" placeholder="Enter a search term..."
+               value="{{ pg.search if pg and pg.search else '' }}"
+               class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+               onkeydown="if(event.key==='Enter'){applySearch(); return false;}">
+        <div class="flex justify-end gap-2">
+            <button onclick="clearSearch()"
+                    class="px-3 py-1.5 text-sm text-stone-600 border border-stone-300 rounded-lg hover:bg-stone-50 cursor-pointer transition-colors">
+                Clear
+            </button>
+            <button onclick="closeSearchModal()"
+                    class="px-3 py-1.5 text-sm text-stone-600 border border-stone-300 rounded-lg hover:bg-stone-50 cursor-pointer transition-colors">
+                Cancel
+            </button>
+            <button onclick="applySearch()"
+                    class="px-3 py-1.5 text-sm text-white rounded-lg cursor-pointer transition-colors"
+                    style="background-color: var(--accent-500);">
+                Apply
+            </button>
+        </div>
+    </div>
+</div>
+
+{# ── Bulk-delete confirmation modal ── #}
+<div id="bulk-delete-modal-overlay"
+     class="fixed inset-0 z-[60] flex items-start justify-center pt-24 hidden"
+     onclick="if(event.target===this)closeBulkDeleteModal()">
+    <div class="absolute inset-0 bg-black/40"></div>
+    <div class="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-stone-800">Confirm Bulk Delete</h3>
+        <p class="text-sm text-stone-600">
+            Are you sure you want to delete <strong id="bulk-delete-modal-count">0</strong>
+            {{ resource_config.name_plural | lower }}? This action cannot be undone.
+        </p>
+        <div class="flex justify-end gap-2">
+            <button onclick="closeBulkDeleteModal()"
+                    class="px-3 py-1.5 text-sm text-stone-600 border border-stone-300 rounded-lg hover:bg-stone-50 cursor-pointer transition-colors">
+                Cancel
+            </button>
+            <button onclick="executeBulkDelete()"
+                    class="px-3 py-1.5 text-sm text-white bg-rose-500 hover:bg-rose-600 rounded-lg cursor-pointer transition-colors">
+                Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    var _listBaseUrl = '{{ resource_config.base_url }}';
+    var _listCurPage = {{ cur_page }};
+    var _listCurPageSize = {{ cur_page_size }};
+    var _listCurSortBy = '{{ cur_sort or "id" }}';
+    var _listCurSortOrder = '{{ cur_order }}';
+    var _listCurSearch = '{{ pg.search|default("", true) }}';
+
+    // Keep _detailListUrl in sync whenever a list partial loads
+    if (typeof _detailListUrl !== 'undefined') _detailListUrl = _listBaseUrl;
+    // Set the default panel width for this resource type
+    if (typeof _panelDefaultWidth !== 'undefined') _panelDefaultWidth = {{ resource_config.panel_width }};
+
+    function updateBulkActionButtons() {
+        const checked = document.querySelectorAll('.row-check:checked');
+        const deleteBtn = document.getElementById('bulk-delete-btn');
+        const deleteCountEl = document.getElementById('bulk-delete-count');
+        const editBtn = document.getElementById('bulk-edit-btn');
+        const editCountEl = document.getElementById('bulk-edit-count');
+        if (checked.length > 0) {
+            if (deleteBtn) { deleteBtn.classList.remove('hidden'); }
+            if (deleteCountEl) { deleteCountEl.textContent = 'Delete (' + checked.length + ')'; }
+            if (editBtn) { editBtn.classList.remove('hidden'); }
+            if (editCountEl) { editCountEl.textContent = 'Edit (' + checked.length + ')'; }
+        } else {
+            if (deleteBtn) { deleteBtn.classList.add('hidden'); }
+            if (editBtn) { editBtn.classList.add('hidden'); }
+        }
+    }
+
+    function toggleSelectAll(masterCb) {
+        document.querySelectorAll('.row-check').forEach(function(cb) { cb.checked = masterCb.checked; });
+        updateBulkActionButtons();
+    }
+
+    function showSearchModal() {
+        document.getElementById('search-modal-overlay').classList.remove('hidden');
+        var input = document.getElementById('search-input');
+        input.focus();
+        input.select();
+    }
+
+    function closeSearchModal() {
+        document.getElementById('search-modal-overlay').classList.add('hidden');
+    }
+
+    function applySearch() {
+        var term = document.getElementById('search-input').value.trim();
+        var url = _listBaseUrl + '?page=1&page_size=' + _listCurPageSize +
+                  '&sort_by=' + _listCurSortBy + '&sort_order=' + _listCurSortOrder;
+        if (term) {
+            url += '&search=' + encodeURIComponent(term);
+        }
+        closeSearchModal();
+        window.history.pushState({}, '', url);
+        htmx.ajax('GET', url, {target: '#main-content', swap: 'innerHTML'});
+    }
+
+    function clearSearch() {
+        document.getElementById('search-input').value = '';
+        applySearch();
+    }
+
+    function showBulkDeleteConfirm() {
+        var checked = document.querySelectorAll('.row-check:checked');
+        document.getElementById('bulk-delete-modal-count').textContent = checked.length;
+        document.getElementById('bulk-delete-modal-overlay').classList.remove('hidden');
+    }
+
+    function closeBulkDeleteModal() {
+        document.getElementById('bulk-delete-modal-overlay').classList.add('hidden');
+    }
+
+    function executeBulkDelete() {
+        var ids = Array.from(document.querySelectorAll('.row-check:checked')).map(function(cb) { return cb.value; });
+        closeBulkDeleteModal();
+        fetch(_listBaseUrl + '/actions/bulk/delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ids: ids})
+        }).then(function() {
+            htmx.ajax('GET', window.location.pathname + window.location.search, {target: '#main-content', swap: 'innerHTML'});
+        });
+    }
+
+    function showBulkEditForm() {
+        var ids = Array.from(document.querySelectorAll('.row-check:checked')).map(function(cb) { return cb.value; });
+        htmx.ajax('GET', _listBaseUrl + '/actions/bulk/edit?ids=' + ids.join(','), {
+            target: '#detail-panel-content',
+            swap: 'innerHTML'
+        });
+    }
+</script>
+</div>

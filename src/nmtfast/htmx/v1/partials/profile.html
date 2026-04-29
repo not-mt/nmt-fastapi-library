@@ -1,0 +1,53 @@
+<div class="space-y-6">
+
+    {# Header info extracted by JS into the top bar #}
+    <template data-page-header>
+        <h2 class="text-lg font-bold text-stone-800">Profile</h2>
+    </template>
+
+    <!-- Profile tiles -->
+    <div class="grid grid-cols-1 min-[850px]:grid-cols-2 gap-4">
+
+        <!-- Session Claims tile -->
+        <div class="bg-white rounded-lg border border-stone-200 p-5 hover:shadow-md transition-shadow">
+            <p class="text-sm font-medium text-stone-500 uppercase tracking-wide mb-4">Session Claims</p>
+            <div class="space-y-3 border-t border-stone-100 pt-4">
+                {% for key, value in session.user_claims.items() %}
+                <div>
+                    <p class="text-xs text-stone-400 uppercase tracking-wide">{{ key }}</p>
+                    <p class="text-sm font-medium text-stone-800 mt-0.5 break-all">{{ value }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Access Control tile -->
+        <div class="bg-white rounded-lg border border-stone-200 p-5 hover:shadow-md transition-shadow">
+            <p class="text-sm font-medium text-stone-500 uppercase tracking-wide mb-4">Access Control</p>
+            {% if session.acls %}
+            <div class="space-y-4 border-t border-stone-100 pt-4">
+                {% for acl in session.acls %}
+                <div class="{% if not loop.first %}border-t border-stone-100 pt-3{% endif %}">
+                    <p class="text-xs text-stone-400 uppercase tracking-wide">Principal</p>
+                    <p class="text-sm font-medium text-stone-800 mt-0.5">{{ acl.principal_name }}</p>
+                    <p class="text-xs text-stone-400 uppercase tracking-wide mt-2">Section</p>
+                    <p class="text-sm font-medium text-stone-800 mt-0.5 break-all">{{ acl.section_regex }}</p>
+                    <p class="text-xs text-stone-400 uppercase tracking-wide mt-2">Permissions</p>
+                    <p class="text-sm font-medium text-stone-800 mt-0.5">{{ acl.permissions | join(', ') }}</p>
+                    {% if acl.memo %}
+                    <p class="text-xs text-stone-400 uppercase tracking-wide mt-2">Memo</p>
+                    <p class="text-sm font-medium text-stone-800 mt-0.5">{{ acl.memo }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="border-t border-stone-100 pt-4">
+                <p class="text-sm text-stone-400 italic">No ACLs assigned.</p>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+</div>

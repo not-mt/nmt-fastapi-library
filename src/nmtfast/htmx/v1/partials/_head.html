@@ -1,0 +1,22 @@
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50:  '{{ brand.shade_50 | default("#fff7ed") }}',
+                            100: '{{ brand.shade_100 | default("#ffedd5") }}',
+                            200: '{{ brand.shade_200 | default("#fed7aa") }}',
+                            300: '{{ brand.shade_300 | default("#fdba74") }}',
+                            400: '{{ brand.shade_400 | default("#fb923c") }}',
+                            500: '{{ brand.shade_500 | default("#f97316") }}',
+                            600: '{{ brand.shade_600 | default("#ea580c") }}',
+                        },
+                    },
+                },
+            },
+        }
+    </script>

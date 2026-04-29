@@ -1,0 +1,28 @@
+{# Data-driven zap task status display with polling.
+   Context: resource_config (ResourceConfig), item_id, task #}
+<div class="bg-violet-50 border border-violet-200 rounded-lg p-4">
+    <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-semibold text-violet-700">Zap Task</span>
+        <span class="text-xs px-2 py-0.5 rounded-full
+            {% if task.state == 'COMPLETE' %}bg-emerald-100 text-emerald-700
+            {% elif task.state == 'PENDING' %}bg-amber-100 text-amber-700
+            {% elif task.state == 'ERROR' %}bg-rose-100 text-rose-700
+            {% else %}bg-stone-100 text-stone-700
+            {% endif %}">
+            {{ task.state }}
+        </span>
+    </div>
+    <div class="text-xs text-violet-600 space-y-1">
+        <p>UUID: <span class="font-mono">{{ task.uuid }}</span></p>
+        <p>Duration: {{ task.duration }}s | Runtime: {{ task.runtime }}s</p>
+    </div>
+    {% if task.state not in ['COMPLETE', 'ERROR'] %}
+    <div hx-get="{{ resource_config.base_url }}/{{ item_id }}/zap/{{ task.uuid }}/status"
+         hx-target="closest div.bg-violet-50"
+         hx-swap="outerHTML"
+         hx-trigger="every 2s"
+         class="mt-2 text-xs text-violet-500 animate-pulse">
+        Polling for updates...
+    </div>
+    {% endif %}
+</div>
