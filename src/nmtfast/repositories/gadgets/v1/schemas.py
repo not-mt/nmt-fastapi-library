@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025. All rights reserved.
+# Copyright (c) 2026. All rights reserved.
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Pydantic schemas for interacting with the widgets API."""
+"""Pydantic schemas for interacting with the gadgets API."""
 
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
 
-class WidgetBase(BaseModel):
-    """Base schema for widgets."""
+class GadgetBase(BaseModel):
+    """Base schema for gadgets."""
 
     name: str
     height: Optional[str] = None
@@ -18,22 +18,22 @@ class WidgetBase(BaseModel):
     force: Optional[int] = None
 
 
-class WidgetCreate(WidgetBase):
-    """Schema for creating a new widget."""
+class GadgetCreate(GadgetBase):
+    """Schema for creating a new gadget."""
 
     pass
 
 
-class WidgetRead(WidgetBase):
-    """Schema for reading a widget, including additional attributes."""
+class GadgetRead(GadgetBase):
+    """Schema for reading a gadget, including additional attributes."""
 
-    id: int
+    id: str
     model_config = ConfigDict(from_attributes=True)
 
 
-class WidgetUpdate(BaseModel):
+class GadgetUpdate(BaseModel):
     """
-    Schema for updating an existing widget.
+    Schema for updating an existing gadget.
 
     All fields are optional to support partial updates.
     """
@@ -44,17 +44,17 @@ class WidgetUpdate(BaseModel):
     force: Optional[int] = None
 
 
-class WidgetZap(BaseModel):
-    """Schema to initiate zap task on a widget."""
+class GadgetZap(BaseModel):
+    """Schema to initiate zap task on a gadget."""
 
     duration: int = 10
 
 
-class WidgetZapTask(BaseModel):
-    """Base schema for widgets."""
+class GadgetZapTask(BaseModel):
+    """Schema for gadget zap task status."""
 
     uuid: str
     state: str = "UNKNOWN"
-    id: int
+    id: str
     duration: int
     runtime: int

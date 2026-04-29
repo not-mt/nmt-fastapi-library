@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% include "v1/partials/_head.html" %}
+    <title>{{ app_name }}</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <style>
+        /* Slide-out detail panel transition */
+        #detail-panel {
+            transition: transform 0.3s ease-in-out;
+            transform: translateX(100%);
+        }
+        #detail-panel.open {
+            transform: translateX(0);
+        }
+        /* Panel backdrop */
+        #panel-backdrop {
+            transition: opacity 0.3s ease-in-out;
+        }
+        /* Active nav styling */
+        .nav-link.active {
+            background-color: rgb(245 245 244); /* stone-100 */
+            color: var(--brand-600, rgb(234 88 12));
+        }
+        /* HTMX indicator: hidden by default, shown when .htmx-request ancestor */
+        .htmx-indicator {
+            display: none;
+        }
+        .htmx-request .htmx-indicator {
+            display: inline-block;
+        }
+        .htmx-request .htmx-hide-on-request {
+            display: none;
+        }
+        /* Modal overlay transitions */
+        #delete-modal-overlay,
+        #modal-overlay {
+            transition: opacity 0.15s ease-in-out;
+        }
+        /* Sidebar collapse */
+        #sidebar {
+            transition: width 0.2s ease-in-out;
+            overflow: hidden;
+        }
+        /* Panel resize handle */
+        #panel-resize-handle {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            cursor: col-resize;
+            z-index: 11;
+        }
+        #panel-resize-handle:hover,
+        #panel-resize-handle.dragging {
+            background-color: var(--brand-400, rgb(251 146 60));
+        }
+        #sidebar.sidebar-collapsed {
+            width: 4rem; /* w-16 */
+        }
+        #sidebar.sidebar-collapsed .sidebar-label {
+            display: none;
+        }
+        #sidebar.sidebar-collapsed .sidebar-section-label {
+            display: none;
+        }
+        #sidebar.sidebar-collapsed .nav-link {
+            justify-content: center;
+            padding-left: 0;
+            padding-right: 0;
+        }
+        #sidebar.sidebar-collapsed .sidebar-footer-item {
+            justify-content: center;
+            padding-left: 0;
+            padding-right: 0;
+        }
+        #sidebar.sidebar-collapsed .sidebar-toggle-icon {
+            transform: rotate(180deg);
+        }
+        /* Header overflow "More" dropdown */
+        .header-more-wrapper {
+            position: relative;
+        }
+        .header-more-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.25rem;
+            min-width: 10rem;
+            background: white;
+            border: 1px solid rgb(214 211 209); /* stone-300 */
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            z-index: 20;
+            padding: 0.25rem 0;
+        }
+        .header-more-menu button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            color: rgb(68 64 60); /* stone-700 */
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+        .header-more-menu button:hover {
+            background-color: rgb(245 245 244); /* stone-100 */
+        }
+        @media (min-width: 640px) {
+            .header-overflow-item { display: flex !important; }
+            .header-more-wrapper { display: none !important; }
+        }
+        @media (max-width: 639px) {
+            .header-overflow-item { display: none !important; }
+        }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body class="min-h-screen bg-stone-50" hx-headers='{"X-Requested-With": "XMLHttpRequest"}'>
+
+    <div class="flex h-screen overflow-hidden">
+
+        <!-- Sidebar -->
+        {% include "v1/partials/sidebar.html" %}
+
+        <!-- Main content area -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+
+            <!-- Top header bar -->
+            <header id="top-header" class="bg-white border-b border-stone-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
+                <div id="header-left" class="flex items-center gap-4">
+                    {# Populated by page partials via JS or server-side #}
+                </div>
+                <span class="text-lg font-bold text-stone-800">{{ app_name }}</span>
+            </header>
+
+            <!-- Scrollable content + detail panel -->
+            <div class="flex-1 flex overflow-hidden relative">
+
+                <!-- Main content -->
+                <main id="main-content" class="flex-1 overflow-y-auto p-6">
+                    {% if _partial is defined and _partial %}
+                        {% include _partial %}
+                    {% else %}
+                        {% block content %}{% endblock %}
+                    {% endif %}
+                </main>
+
+                <!-- Panel backdrop (dims main area when panel is open) -->
+                <div id="panel-backdrop"
+                     class="absolute inset-0 bg-black/40 z-[5] {% if panel_partial is defined and panel_partial %}{% else %}hidden{% endif %}"
+                     onclick="closeDetailPanel()"></div>
+
+                <!-- Slide-out detail panel (configurable width via JS) -->
+                <div id="detail-panel"
+                     class="absolute top-0 right-0 h-full bg-white border-l border-stone-200 shadow-lg overflow-y-auto z-10 {% if panel_partial is defined and panel_partial %}open{% endif %}"
+                     style="width: 28rem; max-width: 90vw;">
+                    <div id="panel-resize-handle"></div>
+                    <div id="detail-panel-content">
+                        {%- if panel_partial is defined and panel_partial -%}
+                            {% include panel_partial %}
+                        {%- endif -%}
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Delete confirmation modal (overlay) -->
+    <div id="delete-modal-overlay"
+         class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40">
+        <div class="bg-white rounded-xl shadow-2xl mx-4 max-h-[90vh] overflow-hidden" id="delete-modal-body"
+             style="width: 28rem; max-width: 90vw;">
+            <!-- Modal content loaded via HTMX or showDeleteModal() -->
+        </div>
+    </div>
+
+    <!-- Generic modal (overlay, configurable width via JS) -->
+    <div id="modal-overlay"
+         class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40">
+        <div class="bg-white rounded-xl shadow-2xl mx-4 max-h-[80vh] overflow-hidden" id="modal-body"
+             style="width: 42rem; max-width: 90vw;">
+            <!-- Modal content loaded via openModal() -->
+        </div>
+    </div>
+
+    <script>
+        // ── Detail panel ──
+
+        function closeDetailPanel(skipNav) {
+            const panel = document.getElementById('detail-panel');
+            if (!panel.classList.contains('open')) return; // Panel isn't open, nothing to close
+            const backdrop = document.getElementById('panel-backdrop');
+            panel.classList.remove('open');
+            backdrop.classList.add('hidden');
+            if (!skipNav) {
+                var listUrl = _getListUrl();
+                if (window.location.pathname + window.location.search !== listUrl) {
+                    window.history.pushState({panelOpen: false}, '', listUrl);
+                }
+                _detailListUrl = null;
+            }
+            setTimeout(() => {
+                document.getElementById('detail-panel-content').innerHTML = '';
+            }, 300);
+        }
+
+        /** Compute the list URL from stored state or by stripping the ID from the path. */
+        function _getListUrl() {
+            var base = _detailListUrl
+                || (typeof _listBaseUrl !== 'undefined' ? _listBaseUrl : null)
+                || window.location.pathname.replace(/\/[^\/]+$/, '');
+            // Reconstruct query params from stored list state instead of
+            // window.location.search (which may point at a detail URL).
+            var params = [];
+            if (typeof _listCurPage !== 'undefined') params.push('page=' + _listCurPage);
+            if (typeof _listCurPageSize !== 'undefined') params.push('page_size=' + _listCurPageSize);
+            if (typeof _listCurSortBy !== 'undefined' && _listCurSortBy) {
+                params.push('sort_by=' + _listCurSortBy);
+                params.push('sort_order=' + (typeof _listCurSortOrder !== 'undefined' ? _listCurSortOrder : 'asc'));
+            }
+            if (typeof _listCurSearch !== 'undefined' && _listCurSearch) {
+                params.push('search=' + encodeURIComponent(_listCurSearch));
+            }
+            return base + (params.length ? '?' + params.join('&') : '');
+        }
+
+        function openDetailPanel(widthRem) {
+            const panel = document.getElementById('detail-panel');
+            const backdrop = document.getElementById('panel-backdrop');
+            if (widthRem) {
+                panel.style.width = widthRem + 'rem';
+            } else if (!panel.classList.contains('open')) {
+                // First open: use resource default width
+                var dw = (typeof _panelDefaultWidth !== 'undefined') ? _panelDefaultWidth : 28;
+                panel.style.width = dw + 'rem';
+            }
+            panel.classList.add('open');
+            backdrop.classList.remove('hidden');
+        }
+
+        var _popStateNav = false;
+        var _detailListUrl = null;
+
+        /** Extract the request path from an htmx afterSwap event. */
+        function _getSwapRequestPath(event) {
+            // Primary: htmx requestConfig
+            if (event.detail.requestConfig && event.detail.requestConfig.path) {
+                return event.detail.requestConfig.path;
+            }
+            // Fallback: read hx-* attribute from the triggering element
+            var elt = event.detail.elt;
+            if (!elt) return null;
+            var url = elt.getAttribute('hx-get') || elt.getAttribute('hx-patch') || elt.getAttribute('hx-post');
+            if (url) return url;
+            var parent = elt.closest('[hx-get],[hx-patch],[hx-post]');
+            return parent ? (parent.getAttribute('hx-get') || parent.getAttribute('hx-patch') || parent.getAttribute('hx-post')) : null;
+        }
+
+        document.body.addEventListener('htmx:afterSwap', function(event) {
+            if (event.detail.target.id === 'detail-panel-content') {
+                var wasOpen = document.getElementById('detail-panel').classList.contains('open');
+                openDetailPanel();
+                if (!_popStateNav) {
+                    var detailUrl = _getSwapRequestPath(event);
+                    if (detailUrl) {
+                        // Only store the list URL on the first panel open (not on edit/sub-nav)
+                        if (!wasOpen) {
+                            _detailListUrl = (typeof _listBaseUrl !== 'undefined' ? _listBaseUrl : null)
+                                || detailUrl.replace(/\/[^\/]+$/, '');
+                        }
+                        history.pushState({panelOpen: true, listUrl: _detailListUrl}, '', detailUrl);
+                    }
+                }
+                _popStateNav = false;
+            }
+        });
+
+        document.body.addEventListener('closeDetailPanel', function() {
+            closeDetailPanel();
+        });
+
+        document.body.addEventListener('refreshList', function() {
+            htmx.ajax('GET', _getListUrl(), {target: '#main-content', swap: 'innerHTML'});
+        });
+
+        // ── Panel resize (drag handle) ──
+
+        var _panelDefaultWidth = 28;
+
+        function setPanelWidth(rem) {
+            var panel = document.getElementById('detail-panel');
+            panel.style.width = Math.max(20, Math.min(rem, 80)) + 'rem';
+        }
+
+        (function() {
+            var handle = document.getElementById('panel-resize-handle');
+            var dragging = false;
+
+            handle.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                dragging = true;
+                handle.classList.add('dragging');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!dragging) return;
+                var newWidth = window.innerWidth - e.clientX;
+                var rem = newWidth / 16;
+                setPanelWidth(rem);
+            });
+
+            document.addEventListener('mouseup', function() {
+                if (!dragging) return;
+                dragging = false;
+                handle.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            });
+        })();
+
+        // ── Header bar helpers ──
+
+        function setHeaderLeft(html) {
+            const el = document.getElementById('header-left');
+            el.innerHTML = html;
+            htmx.process(el);
+            setupHeaderOverflow(el);
+        }
+
+        document.body.addEventListener('htmx:afterSwap', function(event) {
+            if (event.detail.target.id === 'main-content') {
+                // Extract header info from the loaded partial
+                const headerEl = event.detail.target.querySelector('[data-page-header]');
+                if (headerEl) {
+                    setHeaderLeft(headerEl.innerHTML);
+                    headerEl.remove();
+                } else {
+                    setHeaderLeft('');
+                }
+            }
+        });
+
+        // On full page load, extract header info
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                const headerEl = document.querySelector('#main-content [data-page-header]');
+                if (headerEl) {
+                    setHeaderLeft(headerEl.innerHTML);
+                    headerEl.remove();
+                }
+            } catch (e) {
+                console.error('Header extraction failed:', e);
+            }
+            // Auto-open the detail panel if it was pre-populated by the server
+            var panelContent = document.getElementById('detail-panel-content');
+            if (panelContent && panelContent.innerHTML.trim().length > 0) {
+                openDetailPanel();
+                // Store the list URL (strip last path segment = the ID)
+                _detailListUrl = window.location.pathname.replace(/\/[^\/]+$/, '');
+                history.replaceState({panelOpen: true, listUrl: _detailListUrl}, '');
+            }
+        });
+
+        // ── Delete confirmation modal ──
+
+        function _hideBackdropForModal() {
+            const backdrop = document.getElementById('panel-backdrop');
+            backdrop.classList.add('hidden');
+        }
+
+        function _restoreBackdropIfPanelOpen() {
+            const panel = document.getElementById('detail-panel');
+            const backdrop = document.getElementById('panel-backdrop');
+            if (panel.classList.contains('open')) {
+                backdrop.classList.remove('hidden');
+            }
+        }
+
+        function showDeleteModal(deleteUrl, resourceType, resourceName) {
+            const overlay = document.getElementById('delete-modal-overlay');
+
+            htmx.ajax('GET', '/ui/v1/delete-confirm', {
+                target: '#delete-modal-body',
+                swap: 'innerHTML',
+                values: {
+                    delete_url: deleteUrl,
+                    resource_type: resourceType,
+                    resource_name: resourceName,
+                },
+            });
+
+            _hideBackdropForModal();
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+        }
+
+        function closeDeleteModal() {
+            const overlay = document.getElementById('delete-modal-overlay');
+            overlay.classList.add('hidden');
+            overlay.classList.remove('flex');
+            document.getElementById('delete-modal-body').innerHTML = '';
+            _restoreBackdropIfPanelOpen();
+        }
+
+        document.getElementById('delete-modal-overlay').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeDeleteModal();
+            }
+        });
+
+        document.body.addEventListener('deleteSuccess', function(event) {
+            closeDeleteModal();
+            closeDetailPanel();
+            htmx.ajax('GET', _getListUrl(), {target: '#main-content', swap: 'innerHTML'});
+        });
+
+        // ── Generic modal ──
+
+        function openModal(url, widthRem) {
+            const overlay = document.getElementById('modal-overlay');
+            const body = document.getElementById('modal-body');
+
+            if (widthRem) {
+                body.style.width = widthRem + 'rem';
+            }
+
+            htmx.ajax('GET', url, {
+                target: '#modal-body',
+                swap: 'innerHTML',
+            });
+
+            _hideBackdropForModal();
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+        }
+
+        function closeModal() {
+            const overlay = document.getElementById('modal-overlay');
+            overlay.classList.add('hidden');
+            overlay.classList.remove('flex');
+            document.getElementById('modal-body').innerHTML = '';
+            _restoreBackdropIfPanelOpen();
+        }
+
+        document.getElementById('modal-overlay').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        document.body.addEventListener('closeModal', function() {
+            closeModal();
+        });
+
+        // ── Browser back/forward support ──
+
+        window.addEventListener('popstate', function(e) {
+            var state = e.state || {};
+            var panel = document.getElementById('detail-panel');
+            var isPanelOpen = panel.classList.contains('open');
+
+            if (state.panelOpen) {
+                // Forward/back to a detail URL — fetch content and open panel
+                _detailListUrl = state.listUrl || window.location.pathname.replace(/\/[^\/]+$/, '');
+                _popStateNav = true;
+                htmx.ajax('GET', window.location.pathname, {
+                    target: '#detail-panel-content',
+                    swap: 'innerHTML'
+                });
+            } else if (isPanelOpen) {
+                // Back to a list URL — close panel without pushing URL
+                closeDetailPanel(true);
+            }
+        });
+
+        // ── Escape key — close any open modal or panel ──
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeDeleteModal();
+                closeModal();
+                closeDetailPanel();
+            }
+        });
+
+        // ── Sidebar toggle ──
+
+        let _userCollapsed = false;
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('sidebar-collapsed');
+            _userCollapsed = sidebar.classList.contains('sidebar-collapsed');
+        }
+
+        // Auto-collapse sidebar on narrow windows
+        (function() {
+            const mql = window.matchMedia('(max-width: 767px)');
+            function handleNarrow(e) {
+                const sidebar = document.getElementById('sidebar');
+                if (e.matches) {
+                    sidebar.classList.add('sidebar-collapsed');
+                } else if (!_userCollapsed) {
+                    sidebar.classList.remove('sidebar-collapsed');
+                }
+            }
+            mql.addEventListener('change', handleNarrow);
+            // Apply on initial load
+            if (mql.matches) {
+                document.getElementById('sidebar').classList.add('sidebar-collapsed');
+            }
+        })();
+
+        // ── Header overflow "More" dropdown ──
+
+        function setupHeaderOverflow(container) {
+            // Remove any existing More wrapper
+            const existing = container.querySelector('.header-more-wrapper');
+            if (existing) existing.remove();
+
+            // Find items marked for overflow
+            const overflowItems = container.querySelectorAll('[data-overflow]');
+            if (overflowItems.length === 0) return;
+
+            // Mark them so CSS can hide/show based on breakpoint
+            overflowItems.forEach(item => item.classList.add('header-overflow-item'));
+
+            // Build More button + dropdown
+            const wrapper = document.createElement('div');
+            wrapper.className = 'header-more-wrapper';
+
+            const btn = document.createElement('button');
+            btn.className = 'inline-flex items-center gap-1 border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer';
+            btn.innerHTML = 'More <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clip-rule="evenodd"/></svg>';
+            btn.onclick = function(e) {
+                e.stopPropagation();
+                menu.classList.toggle('hidden');
+            };
+
+            const menu = document.createElement('div');
+            menu.className = 'header-more-menu hidden';
+
+            overflowItems.forEach(item => {
+                const clone = item.cloneNode(true);
+                clone.classList.remove('header-overflow-item');
+                clone.removeAttribute('data-overflow');
+                // Restyle for dropdown
+                clone.className = '';
+                clone.style = '';
+                clone.removeAttribute('onmouseover');
+                clone.removeAttribute('onmouseout');
+                menu.appendChild(clone);
+            });
+
+            // Process HTMX on cloned elements
+            htmx.process(menu);
+
+            wrapper.appendChild(btn);
+            wrapper.appendChild(menu);
+
+            // Insert after the heading in header-actions or at end of container
+            const actions = container.querySelector('.header-actions');
+            if (actions) {
+                actions.appendChild(wrapper);
+            } else {
+                container.appendChild(wrapper);
+            }
+
+            // Close dropdown on outside click
+            document.addEventListener('click', function closeMore(e) {
+                if (!wrapper.contains(e.target)) {
+                    menu.classList.add('hidden');
+                }
+            });
+        }
+
+        // ── Active nav ──
+
+        function updateActiveNav() {
+            const path = window.location.pathname;
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+                const href = link.getAttribute('hx-get') || link.getAttribute('href');
+                if (href && path.startsWith(href)) {
+                    link.classList.add('active');
+                }
+            });
+        }
+
+        document.body.addEventListener('htmx:pushedIntoHistory', updateActiveNav);
+        document.addEventListener('DOMContentLoaded', updateActiveNav);
+        window.addEventListener('popstate', function() {
+            setTimeout(updateActiveNav, 50);
+        });
+    </script>
+
+</body>
+</html>

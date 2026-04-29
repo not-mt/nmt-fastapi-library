@@ -1,0 +1,44 @@
+<div class="p-6 space-y-4">
+
+    <!-- Confirm state (initial) -->
+    <div id="delete-modal-confirm">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="bg-rose-100 rounded-full p-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-rose-600" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold text-stone-800">Delete {{ resource_type }}</h3>
+                <p class="text-sm text-stone-500">This action cannot be undone.</p>
+            </div>
+        </div>
+
+        <p class="text-sm text-stone-700">
+            Are you sure you want to delete <span class="font-semibold">{{ resource_name }}</span>?
+        </p>
+
+        <div class="mt-6 flex gap-3">
+            <button hx-delete="{{ delete_url }}"
+                    hx-target="#delete-modal-body"
+                    hx-swap="innerHTML"
+                    hx-indicator="#delete-spinner"
+                    class="flex-1 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer inline-flex items-center justify-center gap-2">
+                <!-- Spinner (hidden until htmx:loading) -->
+                <svg id="delete-spinner" class="htmx-indicator h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                Delete
+            </button>
+            <button type="button" onclick="closeDeleteModal()"
+                    class="flex-1 bg-white border border-stone-300 text-stone-700 hover:bg-stone-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+                Cancel
+            </button>
+        </div>
+    </div>
+
+</div>

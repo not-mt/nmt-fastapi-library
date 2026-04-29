@@ -1,0 +1,98 @@
+{# Data-driven resource detail panel.
+   Context: resource_config (ResourceConfig), item, item_id (for zap URLs) #}
+<div class="p-6 space-y-6"
+     style="--accent-50: {{ resource_config.accent.shade_50 }};
+            --accent-100: {{ resource_config.accent.shade_100 }};
+            --accent-500: {{ resource_config.accent.shade_500 }};
+            --accent-600: {{ resource_config.accent.shade_600 }};">
+
+    {%- set item_id = getattr(item, resource_config.id_field) -%}
+    {%- set item_name = getattr(item, resource_config.display_name_field) -%}
+
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-stone-800">{{ resource_config.name }}
+            {%- for f in resource_config.fields if f.is_id %} #{{ getattr(item, f.name) }}{% endfor -%}
+        </h3>
+        <div class="flex items-center gap-1">
+            <div class="flex items-center border border-stone-300 rounded-lg overflow-hidden mr-1">
+                <button onclick="setPanelWidth(28)" title="Small"
+                        class="px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100 cursor-pointer border-r border-stone-300">S</button>
+                <button onclick="setPanelWidth(42)" title="Medium"
+                        class="px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100 cursor-pointer border-r border-stone-300">M</button>
+                <button onclick="setPanelWidth(56)" title="Large"
+                        class="px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100 cursor-pointer">L</button>
+            </div>
+            <button onclick="closeDetailPanel()"
+                    data-action="close"
+                    class="text-stone-400 hover:text-stone-600 cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Details -->
+    <div class="space-y-4">
+        {% for field in resource_config.fields %}
+            {% if field.show_in_detail %}
+        <div>
+            <label class="text-xs font-medium text-stone-500 uppercase tracking-wide">{{ field.label }}</label>
+            {%- set val = getattr(item, field.name) -%}
+            <p class="text-sm text-stone-800 mt-1 {{ 'font-mono break-all' if field.monospace else '' }}">
+                {%- if val is none -%}
+                    {{ field.nullable_display }}
+                {%- else -%}
+                    {{ val }}
+                {%- endif -%}
+            </p>
+        </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- Actions -->
+    <div class="border-t border-stone-200 pt-4 space-y-3">
+        <button hx-get="{{ resource_config.base_url }}/{{ item_id }}/edit"
+                hx-target="#detail-panel-content"
+                hx-swap="innerHTML"
+                class="w-full text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                style="background-color: var(--accent-500);"
+                onmouseover="this.style.backgroundColor='var(--accent-600)'"
+                onmouseout="this.style.backgroundColor='var(--accent-500)'">
+            Edit {{ resource_config.name }}
+        </button>
+        <button onclick="showDeleteModal('{{ resource_config.base_url }}/{{ item_id }}', '{{ resource_config.name }}', '{{ item_name }}')"
+                class="w-full bg-white border border-rose-300 text-rose-600 hover:bg-rose-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+            Delete {{ resource_config.name }}
+        </button>
+    </div>
+
+    {% if resource_config.has_zap %}
+    <!-- Zap section -->
+    <div class="border-t border-stone-200 pt-4">
+        <h4 class="text-sm font-semibold text-stone-700 mb-3">Zap {{ resource_config.name }}</h4>
+        <form hx-post="{{ resource_config.base_url }}/{{ item_id }}/zap"
+              hx-target="#zap-result"
+              hx-swap="innerHTML">
+            <div class="flex items-center gap-2">
+                <input type="number" name="duration" value="10" min="1" max="300"
+                       class="w-20 border border-stone-300 rounded-lg px-3 py-2 text-sm"
+                       style="--tw-ring-color: var(--accent-500);"
+                       onfocus="this.style.borderColor='var(--accent-500)'"
+                       onblur="this.style.borderColor=''"/>
+                <span class="text-xs text-stone-500">seconds</span>
+                <button type="submit"
+                        class="bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+                    Zap
+                </button>
+            </div>
+        </form>
+        <div id="zap-result" class="mt-3"></div>
+    </div>
+    {% endif %}
+
+</div>
