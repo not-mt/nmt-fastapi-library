@@ -1,3 +1,7 @@
+## v1.3.0 (2026-04-29)
+
+    - **feat**: add htmx web templates (823945c)
+
 ## v1.2.3 (2026-04-21)
 
     - **fix**: prepend root_path to openapi.json (d4568ba)
