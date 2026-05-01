@@ -53,6 +53,36 @@ def _build_hide_client_secret_css(flow_types: list[str]) -> str:
     return f"\n<style>\n{rules}\n</style>\n"
 
 
+def _build_extra_scripts() -> str:
+    """
+    Build extra scripts for Swagger UI customization.
+
+    Returns:
+        str: A <script>...</script> string ready for injection into the HTML
+            <head>, or an empty string if no extra scripts are needed.
+    """
+    return """
+    <script defer>
+        window.addEventListener('load', (event) => {
+            const observer = new MutationObserver(() => {
+                console.log("api_key_value mutation observer triggered");
+                const input = document.getElementById('api_key_value');
+                if (input && input.type !== 'password') {
+                    input.type = 'password';
+                    console.log("api_key_value type set to password");
+                }
+            });
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+            });
+            console.log('api_key_value mutation observer created');
+        });
+        console.log("Custom SwaggerUI scripts loaded!");
+    </script>
+    """
+
+
 def register_swagger_ui(
     app: FastAPI,
     *,
@@ -78,11 +108,12 @@ def register_swagger_ui(
     extra_head_css: str = _build_hide_client_secret_css(
         hide_client_secret_for or [],
     )
+    extra_scripts: str = _build_extra_scripts()
 
     @app.get("/docs", include_in_schema=False)
     async def custom_swagger_ui_html(request: Request) -> HTMLResponse:
         """
-        Serve Swagger UI with optional CSS overrides injected.
+        Serve Swagger UI with optional CSS and script overrides injected.
         """
         root = request.scope.get("root_path", "").rstrip("/")
         openapi_url = root + (app.openapi_url or "/openapi.json")
@@ -99,6 +130,7 @@ def register_swagger_ui(
         html_body: str = bytes(html_response.body).decode("utf-8")
         if extra_head_css:
             html_body = html_body.replace("</head>", extra_head_css + "</head>")
+        html_body = html_body.replace("</body>", extra_scripts + "</body>")
         return HTMLResponse(content=html_body)
 
     redirect_url: str = app.swagger_ui_oauth2_redirect_url or "/docs/oauth2-redirect"
