@@ -58,8 +58,7 @@ def _build_extra_scripts() -> str:
     Build extra scripts for Swagger UI customization.
 
     Returns:
-        str: A <script>...</script> string ready for injection into the HTML
-            <head>, or an empty string if no extra scripts are needed.
+        str: A <script>...</script> string ready for injection into the <body>
     """
     return """
     <script defer>
