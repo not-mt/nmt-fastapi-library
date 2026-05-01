@@ -1,3 +1,7 @@
+## v1.4.0 (2026-05-01)
+
+    - **feat**: hide API key in Swagger (fe96b52)
+
 ## v1.3.0 (2026-04-29)
 
     - **feat**: add htmx web templates (823945c)
