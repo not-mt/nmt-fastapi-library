@@ -28,6 +28,8 @@ class GadgetRead(GadgetBase):
     """Schema for reading a gadget, including additional attributes."""
 
     id: str
+    last_task_uuid: Optional[str] = None
+    last_task_status: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -55,6 +57,6 @@ class GadgetZapTask(BaseModel):
 
     uuid: str
     state: str = "UNKNOWN"
-    id: str
+    gadget_id: str
     duration: int
     runtime: int

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from nmtfast.htmx.v1.schemas import PaginationMeta
 from nmtfast.repositories.widgets.v1.api import WidgetApiRepository
 from nmtfast.repositories.widgets.v1.exceptions import WidgetApiException
 from nmtfast.repositories.widgets.v1.schemas import (
@@ -17,6 +18,7 @@ from nmtfast.repositories.widgets.v1.schemas import (
     WidgetUpdate,
     WidgetZap,
     WidgetZapTask,
+    WidgetZapTaskRead,
 )
 
 
@@ -107,7 +109,7 @@ async def test_widget_zap_success(fake_api_client):
     mock_response = WidgetZapTask(
         uuid="uuid-123",
         state="PENDING",
-        id=1,
+        widget_id=1,
         duration=10,
         runtime=0,
     ).model_dump()
@@ -138,6 +140,94 @@ async def test_widget_zap_failure_raises(fake_api_client):
 
 
 @pytest.mark.asyncio
+async def test_widget_zap_history_success(fake_api_client):
+    """
+    Test successful widget_zap_history.
+    """
+    repo = WidgetApiRepository(fake_api_client)
+    mock_list = [
+        {
+            "task_uuid": "task-1",
+            "state": "SUCCESS",
+            "widget_id": 1,
+            "duration": 10,
+            "runtime": 100,
+            "result": None,
+        },
+        {
+            "task_uuid": "task-2",
+            "state": "PENDING",
+            "widget_id": 1,
+            "duration": 10,
+            "runtime": 0,
+            "result": None,
+        },
+    ]
+
+    resp = httpx.Response(status_code=200, json=mock_list)
+    resp.json = lambda **kwargs: mock_list
+    resp.headers["X-Total-Count"] = "2"
+    fake_api_client.get.return_value = resp
+
+    tasks, pagination = await repo.widget_zap_history(1)
+    assert len(tasks) == 2
+    assert isinstance(tasks[0], WidgetZapTaskRead)
+    assert tasks[0].task_uuid == "task-1"
+    assert tasks[1].task_uuid == "task-2"
+    assert isinstance(pagination, PaginationMeta)
+    assert pagination.total == 2
+    assert pagination.page == 1
+    assert pagination.page_size == 10
+    assert pagination.sort_by == "created_at"
+    assert pagination.sort_order == "desc"
+
+
+@pytest.mark.asyncio
+async def test_widget_zap_history_with_search(fake_api_client):
+    """
+    Test widget_zap_history passes search parameter.
+    """
+    repo = WidgetApiRepository(fake_api_client)
+    mock_list = [
+        {
+            "task_uuid": "task-3",
+            "state": "FAILED",
+            "widget_id": 1,
+            "duration": 5,
+            "runtime": 200,
+            "result": {},
+        }
+    ]
+
+    resp = httpx.Response(status_code=200, json=mock_list)
+    resp.json = lambda **kwargs: mock_list
+    resp.headers["X-Total-Count"] = "1"
+    fake_api_client.get.return_value = resp
+
+    tasks, pagination = await repo.widget_zap_history(1, search="FAILED")
+    assert len(tasks) == 1
+    assert tasks[0].state == "FAILED"
+    call_kwargs = fake_api_client.get.call_args
+    assert call_kwargs.kwargs["params"]["search"] == "FAILED"
+    assert call_kwargs.kwargs["params"]["sort_by"] == "created_at"
+    assert call_kwargs.kwargs["params"]["sort_order"] == "desc"
+
+
+@pytest.mark.asyncio
+async def test_widget_zap_history_failure_raises(fake_api_client):
+    """
+    Test widget_zap_history raises WidgetApiException on failure.
+    """
+    repo = WidgetApiRepository(fake_api_client)
+    fake_api_client.get.return_value = httpx.Response(
+        status_code=500, text="Server error"
+    )
+
+    with pytest.raises(WidgetApiException):
+        await repo.widget_zap_history(999)
+
+
+@pytest.mark.asyncio
 async def test_widget_zap_by_uuid_success(fake_api_client):
     """
     Test successful widget_zap_by_uuid.
@@ -146,7 +236,7 @@ async def test_widget_zap_by_uuid_success(fake_api_client):
     mock_response_data = WidgetZapTask(
         uuid="uuid-456",
         state="SUCCESS",
-        id=1,
+        widget_id=1,
         duration=10,
         runtime=123,
     ).model_dump()
