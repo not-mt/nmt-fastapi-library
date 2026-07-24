@@ -292,7 +292,7 @@ async def test_gadget_zap_success(fake_api_client):
     mock_response = GadgetZapTask(
         uuid="uuid-123",
         state="PENDING",
-        id="g1",
+        gadget_id="g1",
         duration=10,
         runtime=0,
     ).model_dump()
@@ -331,7 +331,7 @@ async def test_gadget_zap_by_uuid_success(fake_api_client):
     mock_response_data = GadgetZapTask(
         uuid="uuid-456",
         state="SUCCESS",
-        id="g1",
+        gadget_id="g1",
         duration=10,
         runtime=123,
     ).model_dump()

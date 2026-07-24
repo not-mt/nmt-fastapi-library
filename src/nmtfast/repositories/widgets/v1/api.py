@@ -18,6 +18,7 @@ from nmtfast.repositories.widgets.v1.schemas import (
     WidgetUpdate,
     WidgetZap,
     WidgetZapTask,
+    WidgetZapTaskRead,
 )
 from nmtfast.retry.v1.tenacity import tenacity_retry_log
 
@@ -381,3 +382,70 @@ class WidgetApiRepository:
         logger.debug(f"Bulk updated {updated} widgets")
 
         return updated
+
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(5),
+        wait=wait_fixed(0.2),
+        after=tenacity_retry_log(logger),
+    )
+    async def widget_zap_history(
+        self,
+        widget_id: int,
+        page: int = 1,
+        page_size: int = 10,
+        sort_by: str = "created_at",
+        sort_order: Literal["asc", "desc"] = "desc",
+        search: str | None = None,
+    ) -> tuple[list[WidgetZapTaskRead], PaginationMeta]:
+        """
+        Retrieve zap task history for a widget through the API.
+
+        Args:
+            widget_id: The ID of the widget.
+            page: The page number to retrieve (1-indexed).
+            page_size: The number of items per page.
+            sort_by: The field name to sort by.
+            sort_order: The sort direction ('asc' or 'desc').
+            search: Optional search filter string.
+
+        Returns:
+            tuple[list[WidgetZapTaskRead], PaginationMeta]: A list of task history
+                records and pagination metadata.
+
+        Raises:
+            WidgetApiException: Raised when upstream API reports failure status code.
+        """
+        logger.debug(f"Fetching zap history for widget ID {widget_id}")
+        params: dict[str, str | int] = {
+            "page": page,
+            "page_size": page_size,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+        }
+        if search:
+            params["search"] = search
+        resp = await self.api_client.get(
+            f"/v1/widgets/{widget_id}/zap",
+            params=params,
+        )
+
+        if resp.status_code != 200:
+            logger.info(f"Failed to get zap history: {resp.status_code}: {resp.text}")
+            raise WidgetApiException(resp)
+
+        tasks = [WidgetZapTaskRead(**t) for t in resp.json()]
+        total = int(resp.headers.get("X-Total-Count", len(tasks)))
+        pagination = PaginationMeta(
+            total=total,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            search=search,
+        )
+        logger.debug(
+            f"Retrieved {len(tasks)} zap tasks for widget {widget_id} (total: {total})"
+        )
+
+        return tasks, pagination
