@@ -1,3 +1,7 @@
+## v1.5.0 (2026-07-24)
+
+    - **feat**: add task persistence (#58) (12f8d3e)
+
 ## v1.4.0 (2026-05-01)
 
     - **feat**: hide API key in Swagger (fe96b52)
