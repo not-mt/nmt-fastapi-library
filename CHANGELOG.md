@@ -1,3 +1,7 @@
+## v1.6.0 (2026-08-03)
+
+    - **feat(auth)**: resolve JWT username claims in auth (#60) (5c6972d)
+
 ## v1.5.0 (2026-07-24)
 
     - **feat**: add task persistence (#58) (12f8d3e)
