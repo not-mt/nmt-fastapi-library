@@ -1,6 +1,6 @@
 [project]
 name = "nmtfast"
-version = "1.5.0"
+version = "1.6.0"
 description = "Shared library for nmtfast apps"
 authors = [
     {name = "Alexander Haye", email = "ahayehaye@not-mt.dev"}
@@ -21,7 +21,7 @@ dependencies = [
     "redis (>=6.0.0,<7.0.0)",
     "httpx (>=0.28.1,<0.29.0)",
     "authlib (>=1.6.7,<2.0.0)",
-    "types-authlib (>=1.5.0.20250516,<2.0.0.0)",
+    "types-authlib (>=1.6.0.20250516,<2.0.0.0)",
     "starlette (>=0.49.3)",
     "jinja2 (>=3.1.6,<4.0.0)",
 ]
@@ -149,7 +149,7 @@ cache-dir = ".local/ruff_cache"
 #   later, if necessary.
 #name = "cz_customize"
 name = "cz_conventional_commits"
-version = "1.5.0"
+version = "1.6.0"
 changelog_start_rev = "70c7e7082ee3638cc71ce3d3b4515f5bbef8d200"
 template = "changelog.j2"
 tag_format = "v$version"
