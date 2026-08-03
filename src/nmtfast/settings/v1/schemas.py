@@ -57,12 +57,15 @@ class SectionACL(BaseModel):
         permissions: List of granted permissions (e.g., ["read", "write"]).
         memo: Optional human-readable note describing this ACL entry.
         principal_name: auto-filled name of the principal (API key or OAuth client).
+        resolved_user_label: auto-filled human-readable username stamp for group-
+            granted ACLs, so audit logs can attribute access to the actual user.
     """
 
     section_regex: str
     permissions: list[str]
     memo: Optional[str] = None
     principal_name: Optional[str] = None  # NOTE: do not fill this manually
+    resolved_user_label: Optional[str] = None  # NOTE: auto-filled for group ACLs
     # TODO: add support for filters later
     # filters: list[FilterACL] = []
 

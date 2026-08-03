@@ -21,10 +21,13 @@ class AuthSuccess(BaseModel):
 
     Attributes:
         name: API Key or OAuth client name that was authenticated.
+        username: The resolved user identity extracted from JWT claims, or None
+            for non-user authentication methods (e.g., API keys).
         acls: List of section access control rules.
     """
 
     name: str
+    username: str | None = None
     acls: list[SectionACL]
 
     @field_serializer("acls")
@@ -71,19 +74,22 @@ async def check_acl(
         if section_regex and not re.match(section_regex, section):
             continue
 
+        user_label = acl.resolved_user_label or acl.principal_name
+
         # allow if the section matched, and * is in the and filters is empty
         if "*" in permissions and not filters:
-            logger.debug(
+            logger.info(
                 f"Allow '*' and empty filter list principal: "
-                f"{acl.principal_name} (memo: {acl.memo})"
+                f"{acl.principal_name} (user: {user_label} ; memo: {acl.memo})"
             )
             return True
 
         # allow if the specific permission is granted
         if "*" not in permissions and method in permissions:
-            logger.debug(
+            logger.info(
                 f"Allow method '{method}': permissions: {permissions} "
-                f"principal: {acl.principal_name} (memo: {acl.memo})"
+                f"principal: {acl.principal_name} (user: {user_label} ; "
+                f"memo: {acl.memo})"
             )
             return True
 
@@ -108,7 +114,8 @@ async def check_acl(
         #         return False  # filter specified a field that does not exist in the payload.
 
         logger.debug(
-            f"ACL '{acl.principal_name}' (memo: {acl.memo}) did not grant "
+            f"ACL '{acl.principal_name}' (user: {user_label} ; "
+            f"memo: {acl.memo}) did not grant "
             f"'{method}' permission for '{section}' section, trying next ACL"
         )
 
