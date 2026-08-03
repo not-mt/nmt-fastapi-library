@@ -15,6 +15,7 @@ from jwt import DecodeError, ExpiredSignatureError, InvalidTokenError
 from nmtfast.auth.v1.acl import AuthSuccess
 from nmtfast.auth.v1.exceptions import AuthenticationError, AuthorizationError
 from nmtfast.auth.v1.jwt import (
+    _extract_username,
     _resolve_group_acls,
     _resolve_user_acls,
     authenticate_token,
@@ -215,6 +216,7 @@ async def test_authenticate_token_success():
     mock_token = "valid.token"
     expected_auth_info = AuthSuccess(
         name="client1",
+        username="test-user",
         acls=[
             SectionACL(
                 section_regex=".*", permissions=["read"], principal_name="client1"
@@ -390,7 +392,9 @@ async def test_authenticate_token_multiple_clients():
             section_regex="specific", permissions=["write"], principal_name="client2"
         )
     ]
-    mock_auth_info = AuthSuccess(name="client2", acls=mock_acls)
+    mock_auth_info = AuthSuccess(
+        name="client2", username="correct-user", acls=mock_acls
+    )
 
     with (
         patch("nmtfast.auth.v1.jwt.get_idp_provider", return_value="test-idp"),
@@ -668,10 +672,11 @@ def test_resolve_group_acls_match():
         ),
     )
     claims = {"sub": "alice", "groups": ["netadmin", "users"]}
-    acls = _resolve_group_acls(claims, auth_settings, "test-idp")
+    acls = _resolve_group_acls(claims, auth_settings, "test-idp", username="alice")
     assert len(acls) == 1
     assert acls[0].permissions == ["*"]
     assert acls[0].principal_name == "netadmin"
+    assert acls[0].resolved_user_label == "alice"
 
 
 def test_resolve_group_acls_multiple_groups():
@@ -701,12 +706,13 @@ def test_resolve_group_acls_multiple_groups():
         ),
     )
     claims = {"sub": "alice", "groups": ["netadmin", "devops"]}
-    acls = _resolve_group_acls(claims, auth_settings, "test-idp")
+    acls = _resolve_group_acls(claims, auth_settings, "test-idp", username="alice")
     assert len(acls) == 2
     regexes = {a.section_regex for a in acls}
     assert regexes == {"^network$", "^deploy$"}
     principals = {a.principal_name for a in acls}
     assert principals == {"netadmin", "devops"}
+    assert all(a.resolved_user_label == "alice" for a in acls)
 
 
 def test_resolve_group_acls_no_groups_claim():
@@ -910,6 +916,7 @@ async def test_authenticate_token_composite_client_and_user():
     ):
         result = await authenticate_token("valid.token", auth_settings)
         assert result.name == "alice"
+        assert result.username == "alice-uuid"
         assert len(result.acls) == 2
         regexes = {a.section_regex for a in result.acls}
         assert regexes == {"^widgets$", "^admin$"}
@@ -960,11 +967,14 @@ async def test_authenticate_token_composite_client_and_groups():
     ):
         result = await authenticate_token("valid.token", auth_settings)
         assert result.name == "web_client"
+        assert result.username is None
         assert len(result.acls) == 2
         regexes = {a.section_regex for a in result.acls}
         assert regexes == {"^widgets$", "^network$"}
         principals = {a.principal_name for a in result.acls}
         assert principals == {"web_client", "netadmin"}
+        group_acl = next(a for a in result.acls if a.principal_name == "netadmin")
+        assert group_acl.resolved_user_label is None
 
 
 @pytest.mark.asyncio
@@ -1022,11 +1032,16 @@ async def test_authenticate_token_composite_all_sources():
     ):
         result = await authenticate_token("valid.token", auth_settings)
         assert result.name == "alice"
+        assert result.username == "alice-uuid"
         assert len(result.acls) == 4
         regexes = {a.section_regex for a in result.acls}
         assert regexes == {"^widgets$", "^admin$", "^network$", "^deploy$"}
         principals = {a.principal_name for a in result.acls}
         assert principals == {"web_client", "alice", "netadmin", "devops"}
+        group_acls = [
+            a for a in result.acls if a.principal_name in ("netadmin", "devops")
+        ]
+        assert all(a.resolved_user_label == "alice-uuid" for a in group_acls)
 
 
 @pytest.mark.asyncio
@@ -1062,6 +1077,59 @@ async def test_authenticate_token_backward_compat_no_users_no_groups():
     ):
         result = await authenticate_token("valid.token", auth_settings)
         assert result.name == "client1"
+        assert result.username == "test-user"
         assert len(result.acls) == 1
         assert result.acls[0].section_regex == ".*"
         assert result.acls[0].principal_name == "client1"
+
+
+# ---------------------------------------------------------------------------
+# Username extraction tests
+# ---------------------------------------------------------------------------
+
+
+def test_extract_username_preferred_username():
+    """Test that preferred_username is extracted when present."""
+    claims = {"preferred_username": "jdoe", "sub": "uuid-123"}
+    assert _extract_username(claims) == "jdoe"
+
+
+def test_extract_username_name_claim():
+    """Test fallback to name claim when preferred_username is absent."""
+    claims = {"name": "John Doe", "sub": "uuid-123"}
+    assert _extract_username(claims) == "John Doe"
+
+
+def test_extract_username_email_claim():
+    """Test fallback to email claim when preferred and name are absent."""
+    claims = {"email": "jdoe@example.com", "sub": "uuid-123"}
+    assert _extract_username(claims) == "jdoe@example.com"
+
+
+def test_extract_username_sub_claim():
+    """Test fallback to sub claim as last resort."""
+    claims = {"sub": "uuid-123"}
+    assert _extract_username(claims) == "uuid-123"
+
+
+def test_extract_username_empty_claims():
+    """Test that empty claims returns None."""
+    assert _extract_username({}) is None
+
+
+def test_extract_username_non_string_value():
+    """Test that non-string claim values are skipped."""
+    claims = {"preferred_username": 123, "sub": "uuid-123"}
+    assert _extract_username(claims) == "uuid-123"
+
+
+def test_extract_username_whitespace_only():
+    """Test that whitespace-only values are treated as empty."""
+    claims = {"preferred_username": "   ", "name": "Valid Name"}
+    assert _extract_username(claims) == "Valid Name"
+
+
+def test_extract_username_strips_whitespace():
+    """Test that leading/trailing whitespace is stripped."""
+    claims = {"preferred_username": "  jdoe  "}
+    assert _extract_username(claims) == "jdoe"

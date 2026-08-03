@@ -184,6 +184,7 @@ def _resolve_group_acls(
     claims: dict,
     auth_settings: AuthSettings,
     provider: str,
+    username: str | None = None,
 ) -> list[SectionACL]:
     """
     Resolve ACLs from static group configurations by matching JWT group claims.
@@ -196,6 +197,8 @@ def _resolve_group_acls(
         claims: Decoded JWT claims.
         auth_settings: The auth section of app configuration.
         provider: The matched identity provider name.
+        username: Optional resolved human-readable username to stamp on each
+            group-granted ACL for audit logging.
 
     Returns:
         list[SectionACL]: Merged ACLs from all matching groups, or [] if none match.
@@ -218,11 +221,37 @@ def _resolve_group_acls(
             continue
         logger.debug(f"Matched static group '{group_name}'")
         group_acls.extend(
-            acl.model_copy(update={"principal_name": group_name})
+            acl.model_copy(
+                update={
+                    "principal_name": group_name,
+                    "resolved_user_label": username,
+                }
+            )
             for acl in group_conf.acls
         )
 
     return group_acls
+
+
+def _extract_username(claims: dict[str, str]) -> str | None:
+    """
+    Extract the human-readable username from JWT claims.
+
+    Tries common OIDC claim names in order of preference and returns the first
+    non-empty value found.
+
+    Args:
+        claims: Decoded JWT claims dictionary.
+
+    Returns:
+        str | None: The extracted username, or None if no claim matched.
+    """
+    for claim_name in ("preferred_username", "name", "email", "sub"):
+        value = claims.get(claim_name)
+        if value and isinstance(value, str) and len(value.strip()) > 0:
+            return value.strip()
+
+    return None
 
 
 async def authenticate_token(
@@ -288,9 +317,10 @@ async def authenticate_token(
 
     # resolve composite ACLs from static users and groups
     user_name, user_acls = _resolve_user_acls(claims, auth_settings, provider)
-    group_acls = _resolve_group_acls(claims, auth_settings, provider)
+    username = _extract_username(claims) if claims else None
+    group_acls = _resolve_group_acls(claims, auth_settings, provider, username)
 
     composite_acls: list[SectionACL] = auth_info["acls"] + user_acls + group_acls
     resolved_name: str = user_name if user_name else auth_info["name"]
 
-    return AuthSuccess(name=resolved_name, acls=composite_acls)
+    return AuthSuccess(name=resolved_name, username=username, acls=composite_acls)
